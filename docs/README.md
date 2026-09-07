@@ -7,6 +7,7 @@ surowe logi z buildów/deployów (do diagnostyki).
 
 | Plik | Rola |
 |---|---|
+| `defekty.md` | **Rejestr otwartych defektów i długu tego drzewa** — pozycja naprawiona zostaje na miejscu z ✅, nie znika. Założony 2026-09-07 wraz z pierwszą pozycją (D-FE-1: całe drzewo czerwone w `biome check` przez CRLF na Windows). Odpowiednik `calisthenos-be/docs/defekty.md`, zapowiadany przez `CLAUDE.md` korzenia. |
 | `innovate.md` | Backlog kierunków rozwoju z sesji innowacyjnej (A–E): wyróżnik produktowy, statusy, na czym bazują, sugerowana kolejność. Lista do wyboru pod kolejne `/feature`. |
 | `statistics-plan.md` | Pełny katalog propozycji statystyk (trener o podopiecznym i podopieczny o sobie) z oceną wartości. Bazuje na obecnym schemacie. |
 | `mvp-statistics.md` | Zawężenie powyższego do MVP — proste agregacje SQL bez nowych tabel i wykresów. |
