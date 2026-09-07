@@ -2,7 +2,7 @@ export type LogLevel = "info" | "warn" | "error";
 
 /**
  * Bezpieczne metadane błędu do logów: TYLKO `name` + `code`/`status`. NIGDY `message`
- * ani całego obiektu — SDK (Google/Stripe) potrafią umieścić w message fragmenty żądania
+ * ani całego obiektu — SDK (np. Google) potrafią umieścić w message fragmenty żądania
  * (Bearer/refresh token).
  */
 export function errorMeta(err: unknown): { name?: string; code?: string | number } {

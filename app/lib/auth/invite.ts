@@ -32,12 +32,6 @@ export class InviteError extends Error {
 export interface CreateInviteInput {
   displayName: string;
   email: string | null;
-  /**
-   * Kwota ustaleń w groszach, zapisywana przez BE przy dołączeniu podopiecznego
-   * (zdarzenie `TraineeJoined`); `null` = zaproszenie bez kwoty. Nie jest
-   * płatnością — po S6 nic w FE nie pobiera pieniędzy (D1 specu).
-   */
-  monthlyAmountGrosze: number | null;
   /** Szablon formularza startowego; `null` = zaproszenie bez formularza. */
   onboardingForm: { exerciseIds: string[]; note: string | null } | null;
 }
@@ -52,7 +46,9 @@ export interface CreateInviteInput {
  *
  * Ciało składane jawnie pole po polu: BE odrzuca pola spoza DTO, a `trainerId`
  * wynika z tokenu. Bez `replacesTraineeId` (odnowienie dostępu) — żadna trasa
- * FE dziś tego nie wystawia.
+ * FE dziś tego nie wystawia. Bez kwoty miesięcznej: `monthlyAmountGrosze` wyszło
+ * z kontraktu razem z płatnościami (ADR-0037 po stronie BE), a `forbidNonWhitelisted`
+ * sprawia, że dosłanie go dziś daje `400`, nie ciche zignorowanie.
  *
  * Wąsko, do modalu: `404` (ćwiczenie z szablonu spoza biblioteki albo
  * zarchiwizowane — BE sprawdza to PRZED wstawieniem czegokolwiek), `409`
@@ -69,7 +65,6 @@ export async function createInvite(
       body: {
         displayName: input.displayName,
         email: input.email,
-        monthlyAmountGrosze: input.monthlyAmountGrosze,
         onboardingForm:
           input.onboardingForm == null
             ? null

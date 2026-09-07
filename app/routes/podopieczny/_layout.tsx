@@ -10,9 +10,9 @@ export async function loader(args: LoaderFunctionArgs) {
   const { api, user } = requireUser(args.context, { role: "trainee" });
 
   // Bramka idzie PRZED licznikami — podopieczny, którego i tak odsyłamy, nie ma
-  // po co kosztować dodatkowego wywołania. Do S6 stała tu przed nią druga,
-  // płatnicza; zniknęła razem ze Stripe'em (ADR-0024 po stronie BE), więc
-  // formularz startowy jest dziś jedynymi drzwiami do aplikacji.
+  // po co kosztować dodatkowego wywołania. Formularz startowy jest jedynymi
+  // drzwiami do aplikacji i jedyną bramką tej powłoki (ADR-0037: płatności,
+  // które stały tu przed nim, wyszły z produktu i nie wracają).
   //
   // Jawnie, przez kontrakt (jedno `GET /v1/me/onboarding-form`, na białej liście
   // bramki BE) — ZANIM policzymy cokolwiek, tak jak do integracji.

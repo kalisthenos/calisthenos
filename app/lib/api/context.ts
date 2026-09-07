@@ -19,8 +19,8 @@ export interface AuthUser {
    * integracji była to lepka kolumna `users.trainer_id`, ustawiana raz przy
    * przyjęciu zaproszenia. Teraz to pole kontraktu, którego pustka zależy od
    * tego, jak BE rozstrzyga aktywność relacji — a ADR-0013 uczynił rolę faktem
-   * z OKRESEM. Kto na tym stoi: `authz.ts` (dostęp międzytenantowy) i
-   * `stripe/gate.ts`, gdzie `!trainerId` znaczy „dostęp za darmo". Zanim
+   * z OKRESEM. Kto na tym stoi: `authz.ts` (dostęp międzytenantowy) — drugi
+   * konsument, bramka płatnicza, zniknął razem z płatnościami (ADR-0037). Zanim
    * logowanie zacznie wystawiać tę sesję (krok 2 Etapu 2), trzeba ustalić
    * i zapisać, co BE zwraca w `coach` po zakończeniu okresu relacji.
    */
