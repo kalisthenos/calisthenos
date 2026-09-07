@@ -23,3 +23,12 @@ Uwaga: cookie `__Host-` wymaga `Secure` — w dev działa przez wyjątek dla
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../../../CLAUDE.md`](../../../CLAUDE.md).
+
+## Driver
+
+- **Kształt:** cienka warstwa nad kontraktem zaproszeń. Hasła, sesje i limit prób logowania
+  **są po stronie backendu** — tutaj ich nie ma i nie może być
+- **Reguła nadrzędna:** to jest wystawianie i podgląd zaproszeń, nie uwierzytelnianie. Sesja
+  mieszka w `app/lib/api`
+- **Ostatnia rewizja:** 2026-09-06
+

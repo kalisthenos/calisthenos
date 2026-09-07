@@ -40,3 +40,14 @@ Projekt tej warstwy:
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../../../CLAUDE.md`](../../../CLAUDE.md).
+
+## Driver
+
+- **Kształt:** infrastruktura żądania — klient, sesja na tokenach, rotacja w middlewarze.
+  Nie ma tu logiki produktowej i nie powinno jej być
+- **Reguła nadrzędna:** **origin dokłada `publicFileUrl` TUTAJ**, w warstwie modułów, nigdy
+  w trasie ani w komponencie. Odnośnik do pliku przychodzi jako ścieżka, bo podpisuje go backend
+- **Co wolno importować z trasy:** `requireUser`, `ApiError`, `toRouteResponse`, ciastko sesji.
+  **Nie wolno**: wartości z `client.ts`
+- **Ostatnia rewizja:** 2026-09-06
+

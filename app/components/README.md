@@ -42,3 +42,15 @@ Konwencje wizualne (kolory, typografia, ikonografia): [`../../design-system/READ
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../../CLAUDE.md`](../../CLAUDE.md).
+
+## Driver
+
+- **Kształt:** komponenty używane w **więcej niż jednym miejscu**. Kawałek widoku z jednym
+  użytkownikiem zostaje przy trasie
+- **Reguła nadrzędna:** dane wchodzą **właściwościami**, z loadera. Komponent sięgający sam po
+  dane przestaje być testowalny w oderwaniu i wiąże widok z siecią
+- **Wygląd:** przez tokeny z `app/styles`, nigdy wartościami wprost. Warstwę wizualną prowadzi
+  `frontend-design:frontend-design`
+- **Procedura:** `calisthenos-fe:component`
+- **Ostatnia rewizja:** 2026-09-06
+

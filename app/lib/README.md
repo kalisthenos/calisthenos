@@ -11,6 +11,17 @@ dostępowy, a egzekwuje BE. `traineeId` zostaje wyłącznie tam, gdzie kontrakt 
 go w ścieżce (`/v1/trainees/{traineeId}/…`). Dokładanie `trainerId` podtrzymuje
 złudzenie, że FE czegokolwiek pilnuje.
 
+## Driver
+
+- **Kształt:** jedyna warstwa, która rozmawia z backendem. Trasy biorą dane stąd i pilnuje tego
+  bramka `app/routes/no-direct-api.test.ts`
+- **Reguła nadrzędna:** moduł bierze `api: Api` i **nie ma** argumentu najemcy jako filtra —
+  zakres niesie token, egzekwuje backend. Brak autoryzacji daje **404**, nie 403
+- **Testy:** test-first przeciw **podstawionemu klientowi** (`createApiClient` z podstawionym
+  `fetch`), `<nazwa>.test.ts` obok modułu
+- **Procedura:** `calisthenos-fe:lib-module`
+- **Ostatnia rewizja:** 2026-09-06
+
 ## Pliki w tym katalogu (moduły domenowe i pomocnicze)
 
 | Plik | Rola / kluczowe eksporty |
