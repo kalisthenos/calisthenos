@@ -12,13 +12,30 @@ jest mobile-first i instalowalny jako PWA; UI trenera desktop-first.
 **Konwencja README-per-katalog pochodzi stąd i jest wzorcem dla całego układu.** Drzewo BE
 przejęło ją w etapie E6 przebudowy cyklu pracy; ten katalog robił to od początku.
 
-## Dwie granice, których nie przekraczasz
+## Granica, której nie przekraczasz
 
-- **Git prowadzi Właściciel.** Nie uruchamiaj operacji gita w tym drzewie. Praca kończy się
-  **relacją**: co zmienione, proponowana treść commita, co uruchomić. `guard-bash` w korzeniu
-  to blokuje, ale reguła nie widzi katalogu roboczego — jest na pomyłkę, nie na złą wolę.
 - **Docker i uruchamianie stacku prowadzi Właściciel.** Testy Playwright i pętlę zrzutów
   ekranu piszesz, ale nie uruchamiasz.
+
+Do 2026-09-07 granice były dwie — drugą był git. **Zniesiona decyzją Właściciela: agent
+commituje w tym drzewie tak samo jak w BE.**
+
+## Commit w tym drzewie kosztuje więcej uwagi niż w BE
+
+Nie dlatego, że reguły są ostrzejsze — dlatego, że **nie ma tu żadnego hooka gita.** BE ma
+lefthooka: prettier, eslint i commitlint biegną przy każdym commicie i nie przepuszczą pliku
+niesformatowanego ani nagłówka spoza konwencji. Tutaj **nie biegnie nic**. Dopóki commitował
+Właściciel, bramką był człowiek patrzący na diff; agenta ta bramka nie obejmuje.
+
+Skutek praktyczny: **`npm run lint` NIE wystarcza przed commitem.** To `biome lint`, czyli sam
+linter — formatowania nie dotyka. Pełne sprawdzenie to `npx biome check`, ale **na zmienionych
+plikach, nie na `.`**: na tej maszynie `core.autocrlf=true` wypakowuje całe drzewo z CRLF,
+a Biome chce LF, więc `check .` zwraca dziś **260 błędów** o samych zakończeniach linii
+i Twój diff w nich ginie. To jest defekt środowiska, nie kodu — opisany jako D-FE-1
+w `docs/defekty.md`.
+
+Konwencja commita jest ta sama, co w BE: **konwencjonalny, po polsku**, nagłówek do 100 znaków,
+treść opisująca decyzję. Gałąź robocza, nie `master` wprost — to drzewo idzie przez PR-y.
 
 ## Stack
 
@@ -108,7 +125,7 @@ przekierowanie sprawia, że komenda przestaje pasować i wyskakuje okienko.
 | `npx vitest run <wzorzec>` | testy jednostkowe |
 | `npx biome format --write <plik>` | formatowanie |
 
-`npm install`, git i Docker — **wyłącznie Właściciel**.
+`npm install` i Docker — **wyłącznie Właściciel**. Git prowadzi agent (patrz wyżej).
 
 ## Pułapka, która kosztuje najwięcej czasu
 
