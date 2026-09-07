@@ -6,6 +6,16 @@ oba**: plik trasy i `routes.ts`. Większość plików eksportuje część z:
 `loader` (odczyt danych SSR), `action` (mutacje), `default` (komponent),
 `ErrorBoundary`, `meta`.
 
+## Driver
+
+- **Kształt:** loadery czytają, akcje mutują. Nie ma osobnego API po tej stronie
+- **Reguła nadrzędna:** **trasa to plik PLUS wpis w `app/routes.ts`** — sam plik daje martwy
+  komponent i nic tego nie zgłasza
+- **Czego trasa nie robi:** nie woła klienta backendu, nie dokłada origin do odnośników
+  plikowych, nie buduje własnego mechanizmu sortowania list
+- **Procedura:** `calisthenos-fe:route`
+- **Ostatnia rewizja:** 2026-09-06
+
 ## Trasy top-level (w tym katalogu)
 
 | Plik | URL | Eksporty | Rola | Co robi |
