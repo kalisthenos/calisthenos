@@ -131,21 +131,24 @@ szyfruje tokenów — jedyne wejście FE do tego obszaru to `app/lib/calendar.ts
 
 ---
 
-## Płatności — poza zakresem
+## Płatności — nie ma ich i nie wracają
 
-**Aplikacja nie pobiera dziś żadnych płatności.** Cała integracja ze Stripe
-Connect (subskrypcje, Checkout, Customer Portal, webhooki, ekran aktywacji
-`/podopieczny/aktywuj` i bramka dostępu) zniknęła z FE w segmencie S6
-integracji z backendem — decyzja D1 specu
-[`docs/superpowers/specs/2026-08-29-integracja-fe-be-design.md`](docs/superpowers/specs/2026-08-29-integracja-fe-be-design.md),
-za którą stoi ADR-0024 po stronie BE: model płatności jest nierozstrzygnięty,
-więc backend świadomie nie przejął tego kontekstu.
+**System nie zna płatności trener ↔ podopieczny.** Nie „jeszcze nie zna" — nie zna.
 
-Co zostało: przy zaproszeniu trener może zapisać **kwotę ustaleń**
-(`monthlyAmountGrosze` w `POST /v1/invites`) — BE ją księguje zdarzeniem
-`TraineeJoined`. Nikt jej nie pobiera; rozliczenie idzie poza aplikacją.
+Integracja ze Stripe Connect (subskrypcje, Checkout, Customer Portal, webhooki, ekran
+aktywacji `/podopieczny/aktywuj` i bramka dostępu) zniknęła z FE w segmencie S6 integracji
+z backendem — decyzja D1 specu
+[`docs/superpowers/specs/2026-08-29-integracja-fe-be-design.md`](docs/superpowers/specs/2026-08-29-integracja-fe-be-design.md).
+Stała za tym ADR-0024 po stronie BE, który zdjął kontekst płatności, **nie rozstrzygając
+produktu** — model był nierozstrzygnięty, więc backend świadomie go nie przejął.
 
-Powrót płatności to osobny projekt z własnym specem.
+Rozstrzygnięcie zapadło później, w **ADR-0037**: płatności między trenerem a podopiecznym nie
+są częścią produktu. Padł razem z nim ostatni ślad — opcjonalna „kwota miesięczna"
+w formularzu zaproszenia (`monthlyAmountGrosze` w `POST /v1/invites`), która trafiała do BE
+i nie miała tam odbiorcy. Rozliczenie, jeśli para je prowadzi, idzie poza aplikacją.
+
+Powrót płatności to osobny projekt z własnym specem **i własnym ADR-em** — nie odtworzenie
+tamtego pola.
 
 ---
 

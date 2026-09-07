@@ -31,9 +31,6 @@ function json(body: unknown, status: number, headers?: Record<string, string>): 
  * wysyłek (`429` + `Retry-After`, kluczowany tożsamością — ADR-0031) i własność
  * pliku przy zapisie treningu. Odmowy BE wracają do XHR jako JSON z komunikatem
  * BE i tym samym statusem.
- *
- * Bramka płatności zniknęła stąd w S6 razem z całym Stripe'em: BE zdjął ten
- * kontekst świadomie (ADR-0024), więc nie ma czego pytać o dostęp.
  */
 export async function action(args: ActionFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainee" });

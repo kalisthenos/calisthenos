@@ -23,8 +23,7 @@ export async function loader(args: LoaderFunctionArgs) {
   const { api, user } = requireUser(args.context, { role: "trainee" });
 
   // Wrapped żyje poza layoutem, więc bramka formularza musi tu stać osobno.
-  // Bramki płatności celowo NIE dokładamy — dziś jej tu nie ma i ta zmiana nie
-  // jest od zaostrzania dostępu. Jawnie, przez kontrakt (`GET /v1/me/onboarding-form`
+  // Jawnie, przez kontrakt (`GET /v1/me/onboarding-form`
   // jest na białej liście bramki BE): do fali 2 ta trasa nie woła żadnej innej
   // trasy kontraktu, która odpaliłaby bramkę globalną `403 ONBOARDING_FORM_PENDING`.
   if (await hasPendingOnboarding(api)) throw redirect("/podopieczny/formularz");
