@@ -62,5 +62,10 @@ Cała warstwa produktu jest **polskojęzyczna**; angielskie zostają tylko nazwy
 ## Domknięcie
 
 Wpis w `app/routes.ts`, aktualizacja mapy w `app/routes/README.md`, `npm run typecheck`,
-`npm run lint`, **`npm run build`**. Kończysz na `/finish` — pamiętaj, że **w tym drzewie git
-prowadzi Właściciel**, więc zamknięcie to relacja, nie commit.
+`npm run lint`, **`npm run build`**. Kończysz na `/finish`.
+
+**Git prowadzi agent** — od 2026-09-07, tą samą konwencją co w BE, więc zamknięcie kończy się
+commitem. Ale to drzewo **nie ma ani jednego hooka gita**, więc przed `git commit` uruchamiasz
+sam `npx tsc --noEmit` i `npx biome check <zmienione pliki>` — **po plikach, nie po `.`**, bo
+`check .` topi diff w ~260 błędach o zakończeniach linii (D-FE-1). **`npm install` i Docker nadal
+prowadzi Właściciel.**

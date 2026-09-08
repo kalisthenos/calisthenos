@@ -52,4 +52,10 @@ sam daje ostrzeżenie** o nieużytej supresji.
 `app/components/README.md`. Do iteracji nad wyglądem jest pętla zrzutów ekranu
 (`npm run shots`) — **wymaga działającego backendu i uruchamia ją Właściciel**.
 
-Kończysz na `/finish` — **git i Docker prowadzi Właściciel**.
+Kończysz na `/finish`.
+
+**Git prowadzi agent** — od 2026-09-07, tą samą konwencją co w BE. Ale to drzewo **nie ma ani
+jednego hooka gita**, więc przed `git commit` uruchamiasz sam `npx tsc --noEmit` i `npx biome
+check <zmienione pliki>` — **po plikach, nie po `.`**, bo `check .` topi diff w ~260 błędach
+o zakończeniach linii (D-FE-1). **`npm install`, Docker i pętla zrzutów nadal należą do
+Właściciela.**

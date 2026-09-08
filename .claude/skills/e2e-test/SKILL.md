@@ -47,5 +47,11 @@ niż czerwień i bywa przeoczone.
 `npm run typecheck`, `npm run lint`. Aktualizacja `tests/README.md`, gdy zmienia się to, co
 w ogóle w tym katalogu stoi.
 
-Kończysz **relacją**: co napisane, jaką komendą uruchomić, czego dowodzi i czego nie.
-**Git i Docker prowadzi Właściciel.**
+Kończysz **relacją**: co napisane, jaką komendą uruchomić, czego dowodzi i czego nie — a potem
+commitem, bo **git prowadzi agent** od 2026-09-07, tą samą konwencją co w BE. Relacja zastępuje
+tu wynik testu, nie commit: scenariusza nie uruchamiasz, więc nie masz zieleni do pokazania.
+
+To drzewo **nie ma ani jednego hooka gita**, więc przed `git commit` uruchamiasz sam
+`npx biome check <zmienione pliki>` — **po plikach, nie po `.`**, bo `check .` topi diff w ~260
+błędach o zakończeniach linii (D-FE-1). **Docker, stack i `npm install` nadal prowadzi
+Właściciel** — to jest granica, która NIE padła.
