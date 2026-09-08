@@ -24,41 +24,18 @@ import type { DraftEntry, SetDraft } from "./log-draft";
 // ============================================================
 
 /**
- * A flattened "entry" the trainee logs against. Each plan item produces one
- * entry; for dropset blocks, each drop becomes its own entry (with the block's
- * sets count). Entries are ordered by (sessionOrdinal, blockOrdinal, itemOrdinal).
- */
-export interface LoggingEntry {
-  /** The plan_item id this entry maps to (for reference; not directly used by writers). */
-  planItemId: string;
-  exerciseId: string;
-  exerciseName: string;
-  unit: "REPS" | "SEC";
-  /** Number of sets the trainee is expected to perform. */
-  expectedSets: number;
-  /** Target reps (or seconds) per set. */
-  expectedReps: number;
-  /** Optional trainer note. */
-  note: string | null;
-  /** Whether this entry belongs to a dropset block (UI affordance only). */
-  isDropsetItem: boolean;
-  /** Czy ćwiczenie zbiera ocenę trudności (RPE) per seria. */
-  tracksRpe: boolean;
-}
-
-/**
- * Następca `LoggingEntry` — wpis formularza logowania jako STAN, nie odbicie
- * planu: niesie pochodzenie (`origin`) i własną liczbę serii, bo wymiana
- * ćwiczenia podmienia wpis W MIEJSCU, a dodatek spoza planu nie ma pozycji
- * planu w ogóle. Nadzbiór `DraftEntry` (`log-draft.ts`) — dokłada wyłącznie
- * pola do RYSOWANIA karty (`key`, `note`, `expectedReps`, `plannedSets`,
- * `substitutedExerciseName`, `isDropsetItem`), więc `LogEntry[]` przechodzi
- * bez rzutowania wszędzie, gdzie kontrakt woła `DraftEntry[]`
- * (`serializeDraft`, `buildLogPayload` niżej).
+ * Wpis formularza logowania jako STAN, nie odbicie planu: niesie pochodzenie
+ * (`origin`) i własną liczbę serii, bo wymiana ćwiczenia podmienia wpis
+ * W MIEJSCU, a dodatek spoza planu nie ma pozycji planu w ogóle. Nadzbiór
+ * `DraftEntry` (`log-draft.ts`) — dokłada wyłącznie pola do RYSOWANIA karty
+ * (`key`, `note`, `expectedReps`, `plannedSets`, `substitutedExerciseName`,
+ * `isDropsetItem`), więc `LogEntry[]` przechodzi bez rzutowania wszędzie,
+ * gdzie kontrakt woła `DraftEntry[]` (`serializeDraft`, `buildLogPayload`).
  *
- * Współistnieje z `LoggingEntry` — trasa `podopieczny/loguj.$sessionId.tsx`
- * przechodzi na ten kształt dopiero w Zadaniu 8, więc dziś obie funkcje
- * (`toLoggingEntries` i `toLogEntries`) stoją obok siebie.
+ * Zastąpił `LoggingEntry`, który odbijał plan i nie umiał wyrazić ani zamiany,
+ * ani wpisu spoza planu. Stary kształt zniknął razem z `toLoggingEntries`
+ * wtedy, gdy trasa `podopieczny/loguj.$sessionId.tsx` przeszła na ten — nie
+ * wcześniej, bo do tej chwili był jej jedynym kształtem.
  */
 export interface LogEntry {
   /** Stabilny klucz Reacta — NIE indeks: wpisy dochodzą i są wymieniane. */
@@ -133,42 +110,14 @@ export async function loadSessionForLogging(
 }
 
 /**
- * Spłaszczenie sesji do wpisów formularza logowania — jedna pozycja planu = jeden
- * wpis; w dropsecie liczbę serii niesie BLOK, a pozycje mają `sets: null`.
- * Czysta funkcja: do integracji robił to `loadSessionForLogging(db)` po drodze
- * z bazy, więc nie miała testu. Kształt `LoggingEntry` zostaje — formularz
- * i akcja czytają go bez zmian.
- */
-export function toLoggingEntries(session: SessionDetailView): LoggingEntry[] {
-  const entries: LoggingEntry[] = [];
-  for (const block of session.blocks) {
-    const isDropset = block.kind === "dropset";
-    for (const item of block.items) {
-      entries.push({
-        planItemId: item.id,
-        exerciseId: item.exerciseId,
-        exerciseName: item.exerciseName,
-        unit: item.unit,
-        expectedSets: isDropset ? (block.sets ?? 1) : (item.sets ?? 1),
-        expectedReps: item.reps,
-        note: item.note,
-        isDropsetItem: isDropset,
-        tracksRpe: item.tracksRpe,
-      });
-    }
-  }
-  return entries;
-}
-
-/**
- * `toLoggingEntries` ewoluuje w następcę: to samo spłaszczenie (w dropsecie
- * liczbę serii niesie BLOK, w single/superset — pozycja), plus pola, których
- * stan formularza teraz potrzebuje. Każdy wpis wraca z `origin: "planned"`
- * i pustym wskaźnikiem zamiany — wymianę i dodatek dokłada dopiero formularz
- * (Zadanie 8), ta funkcja tylko SIEJE stan z planu. `sets` startuje jako
- * `plannedSets` pustych wierszy — dotąd robił to inicjalizator `useState`
- * w trasie (`Array.from({ length: entry.expectedSets }, () => ({ reps: "",
- * … }))`); tu jest to samo, ale przetestowane i bez duplikatu w dwóch plikach.
+ * Spłaszczenie sesji do wpisów formularza logowania — jedna pozycja planu =
+ * jeden wpis; w dropsecie liczbę serii niesie BLOK (pozycje mają wtedy
+ * `sets: null`), w single/superset — pozycja. Każdy wpis wraca z
+ * `origin: "planned"` i pustym wskaźnikiem zamiany: wymianę i dodatek spoza
+ * planu dokłada dopiero formularz, ta funkcja tylko SIEJE stan z planu.
+ * `sets` startuje jako `plannedSets` pustych wierszy — dotąd robił to
+ * inicjalizator `useState` w trasie; tu jest to samo, ale przetestowane
+ * i bez duplikatu w dwóch plikach.
  */
 export function toLogEntries(session: SessionDetailView): LogEntry[] {
   const entries: LogEntry[] = [];

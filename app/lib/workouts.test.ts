@@ -26,7 +26,6 @@ import {
   loadTraineeLog,
   saveWorkoutLog,
   toLogEntries,
-  toLoggingEntries,
 } from "./workouts";
 
 function klient(reguly: (req: Request) => Response | Promise<Response>) {
@@ -279,18 +278,25 @@ const SESJA = {
   ],
 };
 
-describe("toLoggingEntries — spłaszczenie sesji do wpisów formularza", () => {
+describe("toLogEntries — spłaszczenie sesji do wpisów formularza", () => {
   it("w dropsecie liczbę serii niesie BLOK, w single/superset — pozycja", () => {
     // Ta reguła była do integracji zaszyta w zapytaniu Drizzle i nie miała testu.
     // Pomylenie źródła daje formularz z jedną serią zamiast dwóch dla każdego
     // dropu — a podopieczny nie ma jak zauważyć, że brakuje mu wierszy.
-    const wpisy = toLoggingEntries(SESJA);
+    const wpisy = toLogEntries(SESJA);
 
-    expect(wpisy.map((w) => [w.exerciseName, w.expectedSets, w.isDropsetItem])).toEqual([
+    expect(wpisy.map((w) => [w.exerciseName, w.plannedSets, w.isDropsetItem])).toEqual([
       ["Pull-up", 3, false],
       ["Dip", 2, true],
       ["Push-up", 2, true],
     ]);
+  });
+
+  it("liczba PUSTYCH wierszy serii idzie za planem, nie za stałą", () => {
+    // Wiersze sieje ta funkcja, nie inicjalizator w trasie (przeniesione w Zadaniu 5).
+    // Rozjazd między `plannedSets` a `sets.length` dałby kartę, na której nie da się
+    // wpisać wykonania ostatniej serii — i nikt by tego nie zgłosił jako błędu.
+    expect(toLogEntries(SESJA).map((w) => w.sets.length)).toEqual([3, 2, 2]);
   });
 
   it("przenosi cel, jednostkę, notatkę i flagę RPE per pozycja; brak liczby serii to 1", () => {
@@ -299,20 +305,21 @@ describe("toLoggingEntries — spłaszczenie sesji do wpisów formularza", () =>
     // do zera wierszy i podopieczny nie miałby gdzie wpisać wykonania. Reszta pól
     // (cel, jednostka, notatka, RPE) pochodzi z POZYCJI, nie z bloku — mieszanie
     // źródeł pokazałoby cudzą jednostkę albo notatkę przy złym ćwiczeniu.
-    const [pierwszy, drugi] = toLoggingEntries({
+    const [pierwszy, drugi] = toLogEntries({
       ...SESJA,
       blocks: [{ ...SESJA.blocks[0]!, items: [{ ...SESJA.blocks[0]!.items[0]!, sets: null }] }],
     });
 
     expect(pierwszy).toMatchObject({
-      planItemId: "i-1",
+      key: "i-1",
       exerciseId: "e-1",
       unit: "REPS",
-      expectedSets: 1,
+      plannedSets: 1,
       expectedReps: 8,
       note: "kontrola na dole",
       tracksRpe: true,
     });
+    expect(pierwszy?.sets).toHaveLength(1);
     expect(drugi).toBeUndefined();
   });
 
@@ -320,10 +327,8 @@ describe("toLoggingEntries — spłaszczenie sesji do wpisów formularza", () =>
     // Sesja bez ćwiczeń jest legalna (trener zaczął układać plan i nie skończył),
     // a formularz ma wtedy pokazać pusty stan „Brak ćwiczeń". Spłaszczenie musi
     // więc oddać `[]`, a nie wywrócić się ani dorzucić wpisu-widma.
-    expect(toLoggingEntries({ ...SESJA, blocks: [] })).toEqual([]);
-    expect(toLoggingEntries({ ...SESJA, blocks: [{ ...SESJA.blocks[0]!, items: [] }] })).toEqual(
-      [],
-    );
+    expect(toLogEntries({ ...SESJA, blocks: [] })).toEqual([]);
+    expect(toLogEntries({ ...SESJA, blocks: [{ ...SESJA.blocks[0]!, items: [] }] })).toEqual([]);
   });
 
   it("w supersecie liczba serii pochodzi z POZYCJI, nie z bloku", () => {
@@ -331,7 +336,7 @@ describe("toLoggingEntries — spłaszczenie sesji do wpisów formularza", () =>
     // `sets` na bloku ma zawsze `null` — pomyłka `block.sets` zamiast `item.sets`
     // przeszłaby tam niezauważona. `superset` jest jedynym nie-dropsetem, który
     // NIESIE własne `sets`, więc dopiero on tę gałąź naprawdę bada.
-    const wpisy = toLoggingEntries({
+    const wpisy = toLogEntries({
       ...SESJA,
       blocks: [
         {
@@ -343,16 +348,13 @@ describe("toLoggingEntries — spłaszczenie sesji do wpisów formularza", () =>
       ],
     });
 
-    expect(wpisy.map((w) => [w.expectedSets, w.isDropsetItem])).toEqual([[4, false]]);
+    expect(wpisy.map((w) => [w.plannedSets, w.isDropsetItem])).toEqual([[4, false]]);
   });
-});
 
-describe("toLogEntries — następca toLoggingEntries, z pochodzeniem i pustymi seriami", () => {
-  it("przenosi to, co toLoggingEntries, i dokłada origin, klucz oraz puste serie w liczbie planowanej", () => {
-    // `toLogEntries` zastąpi `toLoggingEntries` w Zadaniu 8 (trasa). Do tego czasu obie
-    // funkcje stoją obok siebie — `toLoggingEntries` zostaje jedynym, co czyta dzisiejsza
-    // trasa, więc ruszenie jej złamałoby więcej niż cztery znane błędy typów (STAN DRZEWA
-    // Zadania 5). `key` bierze się z `planItemId`, `plannedSets` z dawnego `expectedSets`.
+  it("każdy wpis wraca jako PLANOWANY, bez wskaźnika zamiany i z pustymi seriami", () => {
+    // Wymianę i dodatek spoza planu dokłada wyłącznie formularz. Gdyby ta funkcja
+    // zasiała cokolwiek innego niż `planned`, log poleciałby z pochodzeniem,
+    // którego podopieczny nie wybrał — a BE przyjąłby go bez mrugnięcia okiem.
     const pustaSeria = { reps: "", difficulty: "", skipped: false, videoFileId: null };
 
     expect(toLogEntries(SESJA)).toEqual([
