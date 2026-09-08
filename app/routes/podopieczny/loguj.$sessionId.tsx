@@ -89,7 +89,8 @@ const DescriptorSchema: z.ZodType<EntryDescriptor> = z.object({
 /**
  * Górne ograniczenia są tu wyłącznie po to, żeby podrobiony ładunek nie kazał
  * akcji przemielić miliona nieistniejących pól — NIE są odtworzeniem sufitów
- * domenowych (N15: 50 serii na ćwiczenie, 20 wpisów spoza planu). Te pilnuje
+ * domenowych (N15: 50 serii na ćwiczenie oraz 20 wpisów o pochodzeniu innym niż
+ * `planned` — czyli zamienniki RAZEM z dodatkami, nie same dodatki). Te pilnuje
  * backend i wracają jako `400` z `details.limit`; celowo są niższe niż to, co
  * przepuszczamy tutaj, żeby nikt nie wziął tej liczby za regułę produktu.
  */
@@ -367,15 +368,25 @@ export default function LogForm() {
   // Klucz idzie po `entry.key`, nie po indeksie: wpisy da się teraz usuwać, a klucz
   // po indeksie zostawiłby po usuniętym wpisie wieczne „trwa wysyłka".
   const [uploadingKeys, setUploadingKeys] = useState<Record<string, boolean>>({});
-  const uploadingCount = useMemo(() => {
-    let n = 0;
+  // Liczone PER WPIS, nie tylko sumarycznie: karta musi wiedzieć, czy to ONA ma
+  // wysyłkę w toku, bo tylko wtedy gasi „–" (docblock `LogExerciseCard`, punkt 3).
+  // Iterowanie po bieżących wpisach i wierszach jest zarazem sprzątaniem — klucze
+  // po wpisie usuniętym albo po wierszu zdjętym po prostu nie są liczone.
+  const uploadingPerEntry = useMemo(() => {
+    const licznik: Record<string, number> = {};
     for (const entry of entries) {
+      let n = 0;
       for (let j = 0; j < entry.sets.length; j++) {
         if (uploadingKeys[`${entry.key}-${j}`]) n++;
       }
+      licznik[entry.key] = n;
     }
-    return n;
+    return licznik;
   }, [entries, uploadingKeys]);
+  const uploadingCount = useMemo(
+    () => Object.values(uploadingPerEntry).reduce((suma, n) => suma + n, 0),
+    [uploadingPerEntry],
+  );
 
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
@@ -462,6 +473,19 @@ export default function LogForm() {
    * Zdejmuje wiersz. Karta podaje `onRemove` wyłącznie dla wiersza ponad plan,
    * ale warunek stoi też tutaj — wiersz planowany zostawiony pusty JEST
    * informacją („seria pominięta"), a nie śmieciem do posprzątania.
+   *
+   * **Przemontowanie karty jest tu konieczne i jest bezpieczne wyłącznie dzięki
+   * blokadzie w karcie.** Konieczne, bo zdjęcie wiersza przesuwa indeksy serii,
+   * a `VideoUploadField` czyta `initialFileId` tylko przy montowaniu — bez
+   * remountu wiersz pokazywałby nagranie sąsiada. Bezpieczne, bo karta gasi „–",
+   * dopóki cokolwiek w niej leci (`uploadInFlight`), więc nie ma wysyłki, którą
+   * remount mógłby po cichu przerwać.
+   *
+   * Rozważane i ODRZUCONE: nadanie wierszom trwałej tożsamości, żeby remount był
+   * niepotrzebny. Klucz musiałby zamieszkać w `SetDraft`, a ten jedzie do
+   * `sessionStorage` i do `buildLogPayload` — czyli podniesienie wersji szkicu
+   * i odrzucenie szkiców v4 u wszystkich, którzy właśnie ćwiczą. Nieproporcjonalne
+   * do jednego przycisku, który i tak jest do kliknięcia sekundę później.
    */
   const removeSet = (key: string, sIdx: number) => {
     patchEntry(key, (entry) => {
@@ -488,11 +512,19 @@ export default function LogForm() {
    * i nikt nie musi tego zauważyć. Notatka trenera dotyczyła ćwiczenia,
    * którego już tu nie ma.
    *
-   * Druga wymiana pod rząd NIE robi łańcucha: wskaźnik dalej pokazuje ćwiczenie
-   * z PLANU, bo tylko takie przechodzi N13 („zastąpione stoi w tej sesji").
-   * Z tego samego powodu karta pokazuje „Wymień" WYŁĄCZNIE przy wpisie z planu:
-   * wskaźnik na ćwiczenie spoza sesji odbiłby się o N13, a wpis spoza planu
-   * poprawia się usunięciem i dodaniem właściwego.
+   * **Druga wymiana pod rząd NIE robi łańcucha, i pilnuje tego TERNARY niżej —
+   * nie widoczność przycisku.** Karta pokazuje „Wymień" przy każdym wpisie, który
+   * nie jest `extra`, więc TAKŻE przy zamienniku; wpis już zamieniony trafia tu
+   * ponownie i wtedy `entry.origin === "substitute"` każe zachować PIERWOTNY
+   * `substitutedExerciseId`. Gdyby ten warunek uprościć do `entry.exerciseId`,
+   * druga wymiana wskazałaby ćwiczenie spoza sesji planu, a to jest N13
+   * (`SUBSTITUTED_EXERCISE_NOT_IN_SESSION`) — odbite dopiero przy zapisie, po
+   * całym treningu. Ternary NIE jest martwym warunkiem: jest jedyną ochroną tej
+   * reguły po stronie klienta.
+   *
+   * Wpisu `extra` ta funkcja nie obsługuje i karta „Wymień" przy nim nie pokazuje:
+   * ćwiczenie spoza planu nie ma czego zastępować, a poprawia się je usunięciem
+   * i dodaniem właściwego.
    */
   const swapEntry = (key: string, picked: PickableExercise) => {
     patchEntry(key, (entry) => ({
@@ -632,31 +664,29 @@ export default function LogForm() {
   const swapTarget =
     picker?.mode === "swap" ? (entries.find((e) => e.key === picker.key) ?? null) : null;
 
-  // Wybierak nie może zaproponować ćwiczenia, które właśnie zastępujesz: wskaźnik
-  // pokazujący na samego siebie to `400 SUBSTITUTION_MISPLACED`, a użytkownik nie
-  // ma się o tym dowiadywać z błędu po zapisie. Odsiewamy więc i ćwiczenie
-  // widoczne teraz, i to z planu, które ten wpis już raz zastąpił.
+  // JEDEN odsiew dla OBU trybów, i to jest poprawka po przeglądzie: wcześniej
+  // tryb zamiany odsiewał tylko dwa identyfikatory, więc na sesji „Podciąganie +
+  // Pompki" wymiana Podciągania na Pompki dawała dwie karty „Pompki". Backend to
+  // przyjmuje (duplikat `exerciseId` jest legalny — robi go dropset), więc nie
+  // byłoby żadnej odmowy; był tylko ekran, na którym ta sama reguła obowiązywała
+  // w jednym wybieraku i nie obowiązywała w drugim.
   //
-  // Dla dodatku spoza planu odsiewamy dwie rzeczy. Po pierwsze wszystko, co już
-  // jest w formularzu — druga karta tego samego ćwiczenia niczego nie wnosi, bo
-  // dodatkowe serie dokłada się przyciskiem „Dodaj serię" w karcie, która już
-  // stoi. Po drugie ćwiczenia WŁAŚNIE ZASTĄPIONE, których po wymianie w miejscu
-  // w `entries` już nie ma: „Australian pull-up zamiast Podciąganie" obok
-  // „Podciąganie poza planem" to „zamiast" i „oraz" naraz, czyli dokładnie to,
-  // czego zabrania reguła — a AKURAT TEJ kombinacji backend nie łapie, bo N14
-  // patrzy wyłącznie na wpisy `origin === "planned"`.
+  // Odsiewamy każde ćwiczenie, które ten formularz już niesie, ORAZ każde, które
+  // został w nim zastąpione — po wymianie W MIEJSCU takiego w `entries` już nie
+  // ma, a „Australian pull-up zamiast Podciąganie" obok „Podciąganie poza planem"
+  // to „zamiast" i „oraz" naraz, czyli dokładnie to, czego zabrania reguła.
+  // AKURAT TEJ kombinacji backend nie łapie, bo N14 patrzy wyłącznie na wpisy
+  // `origin === "planned"`.
+  //
+  // Wpis właśnie zastępowany wpada w ten sam odsiew bez osobnego warunku: stoi
+  // w `entries`, więc jego `exerciseId` (wskaźnik na samego siebie —
+  // `400 SUBSTITUTION_MISPLACED`) i jego `substitutedExerciseId` już tam są.
   const pickerExcludeIds = useMemo(() => {
     if (picker == null) return [];
-    if (picker.mode === "extra") {
-      return entries.flatMap((e) =>
-        e.substitutedExerciseId == null ? [e.exerciseId] : [e.exerciseId, e.substitutedExerciseId],
-      );
-    }
-    if (swapTarget == null) return [];
-    return swapTarget.substitutedExerciseId == null
-      ? [swapTarget.exerciseId]
-      : [swapTarget.exerciseId, swapTarget.substitutedExerciseId];
-  }, [picker, entries, swapTarget]);
+    return entries.flatMap((e) =>
+      e.substitutedExerciseId == null ? [e.exerciseId] : [e.exerciseId, e.substitutedExerciseId],
+    );
+  }, [picker, entries]);
 
   const handlePick = (picked: PickableExercise) => {
     if (picker == null) return;
@@ -758,6 +788,7 @@ export default function LogForm() {
               eIdx={eIdx}
               totalEntries={entries.length}
               maxVideoBytes={maxVideoBytes}
+              uploadInFlight={(uploadingPerEntry[entry.key] ?? 0) > 0}
               onUpdateSet={(sIdx, patch) => updateSet(entry.key, sIdx, patch)}
               onSkipSet={(sIdx) => skipSet(entry.key, sIdx)}
               onUnskipSet={(sIdx) => unskipSet(entry.key, sIdx)}
@@ -844,7 +875,7 @@ export default function LogForm() {
         excludeIds={pickerExcludeIds}
         excludedNote={
           picker?.mode === "swap"
-            ? "To ćwiczenie już tu stoi albo właśnie je zastępujesz — wybierz inne."
+            ? "To ćwiczenie już stoi w tym formularzu albo właśnie je zastąpiłeś — wybierz inne."
             : "To ćwiczenie jest już w tym formularzu albo właśnie je zastąpiłeś. Dodatkowe serie dokładasz przyciskiem „Dodaj serię” w jego karcie."
         }
       />

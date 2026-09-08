@@ -16,6 +16,10 @@ type SetState = SetDraft;
  */
 const MAX_SETS_PER_ENTRY = 50;
 
+/** Widoczne uzasadnienie blokady z punktu 3 docblocka karty. */
+const BLOKADA_ZDEJMOWANIA =
+  "Poczekaj na koniec wysyłki nagrania w tym ćwiczeniu — zdjęcie wiersza przerwałoby ją.";
+
 /**
  * Karta jednego ćwiczenia na ekranie logowania. Od „sesji poza planem" wpis nie
  * jest już odbiciem pozycji planu, tylko STANEM formularza: może być zamiennikiem
@@ -30,12 +34,28 @@ const MAX_SETS_PER_ENTRY = 50;
  *    jest jeden wiersz; całość zdejmuje się przyciskiem „Usuń".
  * 2. **Wpisu `planned`/`substitute` NIE wolno usunąć.** Pominięcie ćwiczenia
  *    wyraża się pustymi seriami, nie zniknięciem karty.
+ * 3. **„–" gaśnie, dopóki w TEJ karcie leci nagranie** (`uploadInFlight`).
+ *    Zdjęcie wiersza przesuwa indeksy serii, a `VideoUploadField` czyta
+ *    `initialFileId` wyłącznie przy montowaniu — trasa musi więc kartę
+ *    przemontować, a przemontowanie woła `abort()` idący ścieżką `ABORTED`,
+ *    która **celowo milczy**, bo zakłada, że anulował użytkownik. Bez tej
+ *    blokady zdjęcie omyłkowo dołożonej szóstej serii kasowało trzydziestu-
+ *    megabajtową wysyłkę z serii drugiej, bez słowa, i natychmiast odblokowywało
+ *    „Zapisz sesję" — trening zapisywał się bez nagrania, na które podopieczny
+ *    czekał minutę. Blokada jest WIDOCZNA (przycisk gaśnie, `title` mówi
+ *    dlaczego), więc niczego nie ukrywa; kosztuje tyle, co dokończenie wysyłki.
+ *
+ *    „Wymień" i „Cofnij wymianę" tej blokady NIE dostają, i to jest różnica
+ *    intencji, nie przeoczenie: one z definicji wyrzucają serie tego wpisu, więc
+ *    nagranie do niego robione i tak przestaje mieć adresata. „–" przeciwnie —
+ *    zdejmuje JEDEN pusty wiersz ponad planem i nie mówi nic o pozostałych.
  */
 export function LogExerciseCard({
   entry,
   eIdx,
   totalEntries,
   maxVideoBytes,
+  uploadInFlight,
   onUpdateSet,
   onVideoStateChange,
   onSkipSet,
@@ -51,6 +71,8 @@ export function LogExerciseCard({
   eIdx: number;
   totalEntries: number;
   maxVideoBytes: number;
+  /** Czy KTÓRAKOLWIEK seria tej karty ma trwającą wysyłkę nagrania (punkt 3 wyżej). */
+  uploadInFlight: boolean;
   onUpdateSet: (sIdx: number, patch: Partial<SetState>) => void;
   onVideoStateChange: (sIdx: number, state: VideoUploadState) => void;
   onSkipSet: (sIdx: number) => void;
@@ -191,6 +213,7 @@ export function LogExerciseCard({
               sIdx={sIdx}
               onUnskip={() => onUnskipSet(sIdx)}
               onRemove={sIdx >= lockedRows ? () => onRemoveSet(sIdx) : undefined}
+              removeBlocked={uploadInFlight}
             />
           ) : (
             <SetRow
@@ -206,6 +229,7 @@ export function LogExerciseCard({
               onChange={(patch) => onUpdateSet(sIdx, patch)}
               onSkip={() => onSkipSet(sIdx)}
               onRemove={sIdx >= lockedRows ? () => onRemoveSet(sIdx) : undefined}
+              removeBlocked={uploadInFlight}
               onVideoStateChange={(state) => onVideoStateChange(sIdx, state)}
             />
           ),
@@ -247,6 +271,7 @@ function SetRow({
   onChange,
   onSkip,
   onRemove,
+  removeBlocked,
   onVideoStateChange,
 }: {
   eIdx: number;
@@ -261,6 +286,8 @@ function SetRow({
   onSkip: () => void;
   /** Podane wyłącznie dla wiersza PONAD plan — brak znaczy „nie do zdjęcia". */
   onRemove?: () => void;
+  /** Wysyłka w tej karcie — przycisk zostaje widoczny, ale gaśnie (punkt 3). */
+  removeBlocked: boolean;
   onVideoStateChange: (state: VideoUploadState) => void;
 }) {
   const diffName = `e_${eIdx}_s_${sIdx}_diff`;
@@ -309,9 +336,10 @@ function SetRow({
             <button
               type="button"
               onClick={onRemove}
+              disabled={removeBlocked}
               className="btn btn-sm btn-ghost"
               style={{ fontSize: 11, color: "var(--muted)", padding: "2px 8px", height: 24 }}
-              title="Zdejmij ten wiersz (seria ponad plan)"
+              title={removeBlocked ? BLOKADA_ZDEJMOWANIA : "Zdejmij ten wiersz (seria ponad plan)"}
               aria-label={`Zdejmij serię #${sIdx + 1}`}
             >
               –
@@ -397,11 +425,13 @@ function SkippedSetRow({
   sIdx,
   onUnskip,
   onRemove,
+  removeBlocked,
 }: {
   sIdx: number;
   onUnskip: () => void;
   /** Jak w `SetRow` — tylko wiersz ponad plan da się zdjąć. */
   onRemove?: () => void;
+  removeBlocked: boolean;
 }) {
   return (
     <div
@@ -447,9 +477,10 @@ function SkippedSetRow({
           <button
             type="button"
             onClick={onRemove}
+            disabled={removeBlocked}
             className="btn btn-sm btn-ghost"
             style={{ fontSize: 11, padding: "2px 8px", height: 24 }}
-            title="Zdejmij ten wiersz (seria ponad plan)"
+            title={removeBlocked ? BLOKADA_ZDEJMOWANIA : "Zdejmij ten wiersz (seria ponad plan)"}
             aria-label={`Zdejmij serię #${sIdx + 1}`}
           >
             –
