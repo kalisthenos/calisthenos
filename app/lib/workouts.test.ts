@@ -603,6 +603,50 @@ describe("saveWorkoutLog — zapis przez kontrakt", () => {
     expect(wynik.personalRecords.map((p) => p.exerciseId)).toEqual(["e-1"]);
   });
 
+  it("`origin` i wskaźnik zamiany docierają do WYSŁANEGO ciała, nie giną przy składaniu", async () => {
+    // Dlaczego ten test istnieje: `LogPayloadExercise` (`buildLogPayload`) jest
+    // strukturalnym NADZBIOREM `SaveExerciseLogInput` — kontrola nadmiarowych
+    // właściwości TypeScriptu działa wyłącznie na literale obiektu, nie na
+    // zmiennej, więc podanie tablicy z `buildLogPayload` tam, gdzie ta funkcja
+    // oczekuje `SaveExerciseLogInput[]`, przechodzi `tsc` BEZ SŁOWA — nawet
+    // gdyby składanie ciała niżej po cichu gubiło `origin`/`substitutedExerciseId`
+    // (i przez chwilę naprawdę gubiło: mapowanie przepisywało tylko `exerciseId`
+    // i `sets`). Żaden test `buildLogPayload` tego nie łapie, bo sprawdza
+    // WYNIK BUDOWANIA, nie wysyłkę. Jedyny sposób złapać taki regres to
+    // sprawdzić WYSŁANY JSON przeciw podstawionemu `fetch`, dokładnie jak tu.
+    //
+    // Wpis `substitute` ze wskaźnikiem jest rozróżniający: gdyby przepisywanie
+    // zniknęło, pole `origin` w wysłanym JSON-ie po prostu by nie istniało
+    // (`undefined` ginie w `JSON.stringify` — `bodySerializer.gen.js`), więc
+    // `toMatchObject({ origin: "substitute" })` by nie przeszło. Wpis `planned`
+    // z `substitutedExerciseId: null` NIE różnicowałby tak samo ostro — zbyt
+    // łatwo o asercję, którą spełnia i brak klucza, i klucz o wartości `null`.
+    let cialo: Record<string, unknown> = {};
+    const api = klient(async (req) => {
+      cialo = (await req.json()) as Record<string, unknown>;
+      return json(201, UTWORZONY);
+    });
+
+    await saveWorkoutLog(api, {
+      ...ZAPIS,
+      exercises: [
+        {
+          exerciseId: "z",
+          origin: "substitute",
+          substitutedExerciseId: "a",
+          sets: [{ ordinal: 0, reps: 8, difficulty: 7, videoFileId: null }],
+        },
+      ],
+    });
+
+    const wyslaneCwiczenia = cialo.exercises as Array<Record<string, unknown>>;
+    expect(wyslaneCwiczenia[0]).toMatchObject({
+      exerciseId: "z",
+      origin: "substitute",
+      substitutedExerciseId: "a",
+    });
+  });
+
   it("bez klucza nie wysyła nagłówka", async () => {
     // Pusty nagłówek znaczy dla BE „brak klucza", ale brak nagłówka jest tym samym
     // bez polegania na przycinaniu białych znaków po tamtej stronie.

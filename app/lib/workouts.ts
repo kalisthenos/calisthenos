@@ -345,6 +345,18 @@ export interface SaveSetInput {
 
 export interface SaveExerciseLogInput {
   exerciseId: string;
+  /**
+   * Pochodzenie wpisu i wskaźnik na zastąpione ćwiczenie — OPCJONALNE, bo
+   * kontrakt (`LogWorkoutExerciseDto`) tak je deklaruje i bo dzisiejsza trasa
+   * (`podopieczny/loguj.$sessionId.tsx`, do Zadania 8) buduje ładunek bez
+   * nich. `buildLogPayload` (niżej) wypełnia je zawsze; `saveWorkoutLog`
+   * przepisuje je do ciała BEZ WARUNKU — `undefined` ginie w
+   * `JSON.stringify` tak samo jak nieobecny klucz, więc stary wołający nie
+   * widzi żadnej różnicy na drucie (potwierdzone przeciw wysłanemu JSON-owi
+   * w `workouts.test.ts`, nie tylko przeciw typom).
+   */
+  origin?: "planned" | "substitute" | "extra";
+  substitutedExerciseId?: string | null;
   sets: SaveSetInput[];
 }
 
@@ -431,6 +443,13 @@ export interface SaveWorkoutLogOptions {
  * RAZEM z listą pobitych rekordów, więc `detectNewPRsForLog` zniknęło: rekordy
  * są częścią odpowiedzi `201`, nie osobnym zapytaniem po zapisie.
  *
+ * `origin`/`substitutedExerciseId` z `SaveExerciseLogInput` przechodzą do
+ * ciała BEZ WARUNKU, choć są opcjonalne — `JSON.stringify` (którym generowany
+ * klient serializuje ciało, `bodySerializer.gen.js`) gubi klucz o wartości
+ * `undefined` dokładnie tak samo, jak gdyby go nie było, więc wołający, który
+ * ich nie poda, wysyła to samo co dziś. To one dają backendowi
+ * `SUBSTITUTED_EXERCISE_ALSO_LOGGED` (N14) za darmo.
+ *
  * Co przestało być sprawą FE: własność i dostępność nagrań (`409
  * SET_VIDEO_UNAVAILABLE`, dawne `assertOwnedUnclaimedVideos`), przynależność
  * ćwiczeń do sesji (`409 EXERCISE_NOT_IN_SESSION`), reguły oceny trudności
@@ -455,6 +474,8 @@ export async function saveWorkoutLog(
         allDone: input.allDone,
         exercises: input.exercises.map((exercise) => ({
           exerciseId: exercise.exerciseId,
+          origin: exercise.origin,
+          substitutedExerciseId: exercise.substitutedExerciseId,
           sets: exercise.sets.map((set) => ({
             ordinal: set.ordinal,
             reps: set.reps,
