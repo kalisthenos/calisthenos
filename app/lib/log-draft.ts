@@ -9,6 +9,11 @@
  * trzymać w storage, ale po rozdzieleniu uploadu od zapisu sesji plik leci na serwer
  * od razu po wybraniu, a w formularzu zostaje tylko `fileId` — zwykły string, który
  * przeżywa ubicie karty.
+ *
+ * Od wersji 4 szkic wozi WPISY (`DraftEntry[]`), nie samą macierz serii — lista
+ * ćwiczeń formularza przestała być odbiciem planu (wymiana ćwiczenia W MIEJSCU,
+ * dodatek spoza planu) i stała się stanem, więc szkic musi to umieć odwzorować:
+ * `origin` per wpis i własna, zmienna liczba serii zamiast stałej wziętej z planu.
  */
 
 export type SetDraft = {
@@ -19,36 +24,61 @@ export type SetDraft = {
   videoFileId: string | null;
 };
 
-// Wersja 3: dochodzi `videoFileId` na serię. Szkice v2 są ODRZUCANE — żyją tylko przez
-// sesję przeglądarki, więc migracja nie jest warta kodu, a wstawienie danych o niepełnym
-// kształcie byłoby gorsze niż start od zera.
-//
-// `exerciseIds` (od v2): przywracamy szkic tylko, gdy pasuje do DOKŁADNIE tych samych
-// ćwiczeń w tej samej kolejności. Sama liczba serii nie wystarcza: dwa ćwiczenia o tej
-// samej liczbie serii mogłyby zamienić się miejscami po zmianie planu i szkic wstawiłby
-// dane do złego ćwiczenia.
-type DraftShape = { v: 3; exerciseIds: string[]; sets: SetDraft[][] };
+export type DraftEntry = {
+  exerciseId: string;
+  /** Etykieta, nie klucz — do backendu jedzie wyłącznie `exerciseId`. */
+  exerciseName: string;
+  unit: "REPS" | "SEC";
+  tracksRpe: boolean;
+  origin: "planned" | "substitute" | "extra";
+  substitutedExerciseId: string | null;
+  sets: SetDraft[];
+};
+
+/**
+ * Wersja 4: wpisy (`DraftEntry[]`) zamiast macierzy serii — niosą pochodzenie
+ * (`origin`) i własną liczbę serii, bo lista ćwiczeń przestała być odbiciem
+ * planu i stała się stanem (wymiana ćwiczenia W MIEJSCU, dodatek spoza planu).
+ *
+ * Szkice v3 (i starsze) są ODRZUCANE, nie migrowane — ta sama decyzja co przy
+ * odrzuceniu v2: szkic żyje tylko przez sesję przeglądarki, więc migracja nie
+ * jest warta kodu. **Konsekwencja, którą łatwo przeoczyć:** ktoś, kto w chwili
+ * wdrożenia tej zmiany ma w przeglądarce niezapisany szkic v3 (bo właśnie w tej
+ * chwili ćwiczy), zostanie odrzucony CICHO — `parseDraft` odda `null`, formularz
+ * wstanie pusty, bez komunikatu i bez śladu w logach. To jest zamierzone:
+ * wstawienie danych o kształcie sprzed „origin + zmienna liczba serii" byłoby
+ * gorsze niż start od zera — szkic v3 nie ma jak powiedzieć, który wpis jest
+ * zamianą ani ile serii ma dodatek spoza planu, bo v3 tych pojęć nie znało.
+ * Ten komentarz jest jedynym miejscem, w którym ta wiedza ma szansę przetrwać.
+ *
+ * `planExerciseIds` (od v2, wtedy `exerciseIds`) zostaje kryterium zgodności,
+ * ale znaczy teraz ćwiczenia PLANU, nie ćwiczenia szkicu: te drugie mogą się od
+ * planu różnić i o to w tej zmianie chodzi. Liczba serii przestaje być
+ * kryterium — była nim dopóty, dopóki pochodziła z planu.
+ */
+type DraftShape = { v: 4; planExerciseIds: string[]; entries: DraftEntry[] };
 
 /** Klucz storage per sesja planu — różne sesje mają niezależne szkice. */
 export function draftKey(sessionId: string): string {
   return `kalisthenos:log-draft:${sessionId}`;
 }
 
-export function serializeDraft(exerciseIds: string[], sets: SetDraft[][]): string {
-  return JSON.stringify({ v: 3, exerciseIds, sets } satisfies DraftShape);
+export function serializeDraft(planExerciseIds: string[], entries: DraftEntry[]): string {
+  return JSON.stringify({ v: 4, planExerciseIds, entries } satisfies DraftShape);
 }
 
 /**
- * Parsuje szkic, ale zwraca go tylko gdy jego kształt DOKŁADNIE pasuje do
- * bieżącego planu: te same ćwiczenia w tej samej kolejności (`exerciseIds`) oraz
- * ta sama liczba serii w każdym z nich (`setCounts`). Jakikolwiek rozjazd oznacza
- * nieaktualny szkic (trener zmienił plan) — wtedy `null`, żeby nie wstawiać
- * danych do niepasującego formularza.
+ * Parsuje szkic, ale zwraca go tylko gdy pasuje do bieżącego PLANU: te same
+ * ćwiczenia planu w tej samej kolejności (`planExerciseIds`). Liczba serii
+ * i pochodzenie (`origin`) każdego wpisu jadą w samym szkicu i NIE są już
+ * kryterium zgodności — to one są treścią tej zmiany (wymiana, dodatek spoza
+ * planu). Jakikolwiek rozjazd `planExerciseIds` oznacza, że trener zmienił
+ * plan — wtedy `null`, żeby nie wstawiać danych do niepasującego formularza.
  */
 export function parseDraft(
   raw: string | null,
-  expected: { exerciseIds: string[]; setCounts: number[] },
-): SetDraft[][] | null {
+  expected: { planExerciseIds: string[] },
+): DraftEntry[] | null {
   if (!raw) return null;
   let parsed: unknown;
   try {
@@ -57,21 +87,40 @@ export function parseDraft(
     return null;
   }
   if (!parsed || typeof parsed !== "object") return null;
-  const d = parsed as { v?: unknown; exerciseIds?: unknown; sets?: unknown };
-  if (d.v !== 3 || !Array.isArray(d.exerciseIds) || !Array.isArray(d.sets)) return null;
+  const d = parsed as { v?: unknown; planExerciseIds?: unknown; entries?: unknown };
+  if (d.v !== 4 || !Array.isArray(d.planExerciseIds) || !Array.isArray(d.entries)) return null;
 
-  // Ćwiczenia: ta sama liczba i te same identyfikatory w tej samej kolejności.
-  if (d.exerciseIds.length !== expected.exerciseIds.length) return null;
-  for (let i = 0; i < expected.exerciseIds.length; i++) {
-    if (d.exerciseIds[i] !== expected.exerciseIds[i]) return null;
+  // Plan: ta sama liczba i te same identyfikatory w tej samej kolejności.
+  if (d.planExerciseIds.length !== expected.planExerciseIds.length) return null;
+  for (let i = 0; i < expected.planExerciseIds.length; i++) {
+    if (d.planExerciseIds[i] !== expected.planExerciseIds[i]) return null;
   }
 
-  // Serie: ta sama liczba w każdym ćwiczeniu + poprawne typy pól.
-  if (d.sets.length !== expected.setCounts.length) return null;
-  for (let i = 0; i < expected.setCounts.length; i++) {
-    const row = d.sets[i];
-    if (!Array.isArray(row) || row.length !== expected.setCounts[i]) return null;
-    for (const s of row) {
+  // Wpisy: typ każdego pola, w tym każdej serii — sessionStorage jest danymi
+  // niezaufanymi tak samo jak ciało żądania.
+  for (const e of d.entries) {
+    if (!e || typeof e !== "object") return null;
+    const entry = e as {
+      exerciseId?: unknown;
+      exerciseName?: unknown;
+      unit?: unknown;
+      tracksRpe?: unknown;
+      origin?: unknown;
+      substitutedExerciseId?: unknown;
+      sets?: unknown;
+    };
+    if (
+      typeof entry.exerciseId !== "string" ||
+      typeof entry.exerciseName !== "string" ||
+      (entry.unit !== "REPS" && entry.unit !== "SEC") ||
+      typeof entry.tracksRpe !== "boolean" ||
+      (entry.origin !== "planned" && entry.origin !== "substitute" && entry.origin !== "extra") ||
+      !(typeof entry.substitutedExerciseId === "string" || entry.substitutedExerciseId === null) ||
+      !Array.isArray(entry.sets)
+    ) {
+      return null;
+    }
+    for (const s of entry.sets) {
       if (!s || typeof s !== "object") return null;
       const set = s as {
         reps?: unknown;
@@ -89,20 +138,22 @@ export function parseDraft(
       }
     }
   }
-  return d.sets as SetDraft[][];
+  return d.entries as DraftEntry[];
 }
 
-/** Czy szkic niesie cokolwiek wartego przywrócenia (inaczej nie zawracamy głowy). */
-export function draftHasContent(sets: SetDraft[][]): boolean {
-  return sets.some((row) =>
-    row.some(
-      (s) =>
-        s.skipped ||
-        s.reps.trim() !== "" ||
-        s.difficulty !== "" ||
-        // Samo wgrane nagranie też jest treścią: plik leży już na serwerze, a bez
-        // przywrócenia szkicu odniesienie do niego by przepadło.
-        s.videoFileId !== null,
-    ),
+/**
+ * Czy szkic niesie cokolwiek wartego przywrócenia. Prawda, gdy KTÓRYKOLWIEK
+ * wpis ma pochodzenie inne niż `"planned"` — wymiana i dodatek są treścią same
+ * w sobie, nawet z samymi pustymi seriami, bo to decyzje podopiecznego, których
+ * nie chcemy mu kazać podejmować drugi raz — albo gdy którakolwiek seria niesie
+ * coś wartego zapisania (dotychczasowy warunek, bez zmian).
+ */
+export function draftHasContent(entries: DraftEntry[]): boolean {
+  return entries.some(
+    (entry) =>
+      entry.origin !== "planned" ||
+      entry.sets.some(
+        (s) => s.skipped || s.reps.trim() !== "" || s.difficulty !== "" || s.videoFileId !== null,
+      ),
   );
 }
