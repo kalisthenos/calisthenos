@@ -905,7 +905,17 @@ git commit -m "feat(komponenty): wybierak ćwiczeń z biblioteki trenera"
 **Interfaces:**
 
 - Consumes: `LogEntry`, `SetDraft`, `VideoUploadField`.
-- Produces: `<LogExerciseCard entry index onUpdateSet onSkipSet onAddSet onRemoveSet onSwap onRemoveEntry />`.
+- Produces: `<LogExerciseCard>` z **dokładnie tymi propsami, które `EntryCard` ma dziś** —
+  `entry`, `eIdx`, `totalEntries`, `sets`, `maxVideoBytes`, `onUpdateSet`, `onVideoStateChange`,
+  `onSkipSet`, `onUnskipSet`, `onCopyFromFirst` (sprawdzone w kodzie 2026-09-08,
+  `loguj.$sessionId.tsx:693`).
+
+  **Ani jednego propsa więcej.** Pierwsza wersja tego pola wymieniała `onAddSet`, `onRemoveSet`,
+  `onSwap` i `onRemoveEntry` — czyli wywołania zwrotne Zadania 8 — i przeczyła własnemu ciału
+  zadania, które mówi „nowe przyciski dokłada dopiero Zadanie 8". Rozstrzygnięte przy przeglądzie
+  wstępnym planu na korzyść ciała: **to jest przeniesienie, nie projektowanie interfejsu**.
+  Props dopisany tutaj „na zapas" nie miałby użytkownika, więc nie miałby też testu ani powodu,
+  by mieć akurat taki kształt.
 
 **To jest przeniesienie, nie przepisanie.** `EntryCard` (linia ~693), `SetRow` (~815),
 `SkippedSetRow` (~953) i `tierFor` (~809) wyprowadzają się z trasy do własnego pliku
