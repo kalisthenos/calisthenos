@@ -5,6 +5,7 @@ import {
   exercisesControllerList,
   exercisesControllerRestore,
   exercisesControllerUpdate,
+  myExercisesControllerList,
 } from "@kalisthenos/api-client";
 import type { ExerciseDetail, ExercisePage, UpdateExerciseDto } from "@kalisthenos/api-client";
 import { orNull, publicFileUrl } from "~/lib/api/client";
@@ -39,6 +40,60 @@ async function activeExercisePage(api: Api, page: number): Promise<ExercisePage>
   const { data } = await exercisesControllerList({
     client: api,
     query: { page, sort: "name", status: "active" },
+    throwOnError: true,
+  });
+  return data;
+}
+
+export interface PickableExercise {
+  id: string;
+  name: string;
+  unit: "REPS" | "SEC";
+  tracksRpe: boolean;
+}
+
+/**
+ * Czynne ćwiczenia trenera, do którego podopieczny jest przypięty
+ * (`GET /v1/me/exercises`, ADR-0038). Zakres najemcy niesie token — ten moduł
+ * NIE ma i nie może mieć argumentu `trainerId`.
+ *
+ * Wszystkie strony naraz, jak u trenera: wybierak filtruje po stronie klienta,
+ * bo tak robi `OnboardingPicker` i druga konwencja na to samo zadanie kosztuje
+ * więcej, niż daje. Biblioteka ma rozmiar biblioteki jednego trenera, nie
+ * katalogu — ta sama granica, którą przyjął i zapisał w docblocku
+ * `listActiveExercisesForTrainer`.
+ *
+ * Bliźniak wariantu trenera, z jedną różnicą: wozi `tracksRpe`. Wybierak
+ * trenera go nie potrzebował (ćwiczenie idzie DO PLANU, gdzie flaga nie wpływa
+ * na formularz); podopieczny wybiera ćwiczenie DO ZALOGOWANIA, a od tej flagi
+ * zależy, czy wiersz serii pokaże pole oceny trudności.
+ *
+ * **Pętla stron jest CELOWO powielona z `activeExercisePage`, nie wydzielona
+ * do wspólnego helpera.** Wydzielenie zmieniłoby też wariant trenera, który
+ * karmi edytor planu i formularz startowy — a bezpieczne potwierdzenie takiej
+ * zmiany (zielone testy przed i po refaktorze) wymaga przebiegu testów poza
+ * zakresem tego zadania. Sześć wierszy duplikatu jest tańsze niż niezamierzona
+ * zmiana w dwóch działających ekranach.
+ *
+ * **`status` NIE wchodzi do zapytania** — `/v1/me/exercises` nie zna tego
+ * parametru (wymusza `active` po swojej stronie); backend stoi na
+ * whitelist + forbidNonWhitelisted, więc dopisanie `status` jak u trenera
+ * wróciłoby jako `400`, nie jako ciche pominięcie.
+ */
+export async function listActiveExercisesForTrainee(api: Api): Promise<PickableExercise[]> {
+  const first = await myExercisePage(api, 1);
+  const items = [...first.items];
+  for (let page = 2; page <= first.totalPages; page += 1) {
+    const next = await myExercisePage(api, page);
+    items.push(...next.items);
+  }
+  return items.map((e) => ({ id: e.id, name: e.name, unit: e.unit, tracksRpe: e.tracksRpe }));
+}
+
+async function myExercisePage(api: Api, page: number): Promise<ExercisePage> {
+  const { data } = await myExercisesControllerList({
+    client: api,
+    query: { page, sort: "name" },
     throwOnError: true,
   });
   return data;

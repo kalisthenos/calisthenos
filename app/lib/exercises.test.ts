@@ -21,6 +21,7 @@ import {
   createExercise,
   ExerciseError,
   getExerciseDetail,
+  listActiveExercisesForTrainee,
   listActiveExercisesForTrainer,
   listExercisesForTrainer,
   setExerciseArchived,
@@ -178,6 +179,70 @@ describe("listActiveExercisesForTrainer — picker", () => {
     await listActiveExercisesForTrainer(api);
 
     expect(wywolan).toBe(1);
+  });
+});
+
+describe("listActiveExercisesForTrainee — picker podopiecznego (GET /v1/me/exercises)", () => {
+  it("skleja wszystkie strony, licząc się z totalPages, nie z długością pierwszej strony", async () => {
+    // Dwie strony po dwa: pętla ma zejść po `totalPages`, nie po długości pierwszej
+    // strony — inaczej biblioteka powyżej rozmiaru strony urywa się po cichu, a
+    // wybierak pokazuje wycinek wyglądający jak całość.
+    const strony: Record<string, unknown> = {
+      "1": strona(
+        [
+          { ...CWICZENIE, id: "a", name: "Podciąganie" },
+          { ...CWICZENIE, id: "b", name: "Deska" },
+        ],
+        1,
+        2,
+        4,
+      ),
+      "2": strona(
+        [
+          { ...CWICZENIE, id: "c", name: "Rower" },
+          { ...CWICZENIE, id: "d", name: "Wiosło" },
+        ],
+        2,
+        2,
+        4,
+      ),
+    };
+    const api = klient((req) => {
+      const nr = new URL(req.url).searchParams.get("page") ?? "1";
+      return json(200, strony[nr]);
+    });
+
+    const wynik = await listActiveExercisesForTrainee(api);
+
+    expect(wynik.map((e) => e.name)).toEqual(["Podciąganie", "Deska", "Rower", "Wiosło"]);
+  });
+
+  it("wozi tracksRpe, bo od niego zależy kształt wiersza serii", async () => {
+    // Bliźniak trenera go nie niesie — trener wybiera ćwiczenie DO PLANU, gdzie flaga
+    // nie wpływa na formularz. Podopieczny wybiera ćwiczenie DO ZALOGOWANIA, a od tej
+    // flagi zależy, czy wiersz serii pokaże pole oceny trudności.
+    const api = klient(() =>
+      json(200, strona([{ ...CWICZENIE, id: "a", name: "Deska", tracksRpe: false }])),
+    );
+
+    const wynik = await listActiveExercisesForTrainee(api);
+
+    expect(wynik).toEqual([{ id: "a", name: "Deska", unit: "REPS", tracksRpe: false }]);
+  });
+
+  it("nie wysyła `status` — ten kontrakt go nie zna i oddałby 400, nie ciche pominięcie", async () => {
+    // `MyExercisesControllerListData.query` zna wyłącznie `page`/`q`/`sort`/`unit`/`tag`.
+    // Backend stoi na whitelist + forbidNonWhitelisted, więc skopiowanie `status` z
+    // wariantu trenera nie zostałoby po cichu zignorowane, tylko wróciłoby jako 400.
+    let zapytanie = "";
+    const api = klient((req) => {
+      zapytanie = new URL(req.url).search;
+      return json(200, strona([CWICZENIE]));
+    });
+
+    await listActiveExercisesForTrainee(api);
+
+    expect(zapytanie).not.toContain("status");
   });
 });
 
