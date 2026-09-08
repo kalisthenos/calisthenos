@@ -17,6 +17,7 @@ import type {
 import { orNull, publicFileUrl } from "~/lib/api/client";
 import type { Api } from "~/lib/api/client";
 import { ApiError } from "~/lib/api/errors";
+import type { DraftEntry, SetDraft } from "./log-draft";
 
 // ============================================================
 // Domain types
@@ -43,6 +44,39 @@ export interface LoggingEntry {
   isDropsetItem: boolean;
   /** Czy ćwiczenie zbiera ocenę trudności (RPE) per seria. */
   tracksRpe: boolean;
+}
+
+/**
+ * Następca `LoggingEntry` — wpis formularza logowania jako STAN, nie odbicie
+ * planu: niesie pochodzenie (`origin`) i własną liczbę serii, bo wymiana
+ * ćwiczenia podmienia wpis W MIEJSCU, a dodatek spoza planu nie ma pozycji
+ * planu w ogóle. Nadzbiór `DraftEntry` (`log-draft.ts`) — dokłada wyłącznie
+ * pola do RYSOWANIA karty (`key`, `note`, `expectedReps`, `plannedSets`,
+ * `substitutedExerciseName`, `isDropsetItem`), więc `LogEntry[]` przechodzi
+ * bez rzutowania wszędzie, gdzie kontrakt woła `DraftEntry[]`
+ * (`serializeDraft`, `buildLogPayload` niżej).
+ *
+ * Współistnieje z `LoggingEntry` — trasa `podopieczny/loguj.$sessionId.tsx`
+ * przechodzi na ten kształt dopiero w Zadaniu 8, więc dziś obie funkcje
+ * (`toLoggingEntries` i `toLogEntries`) stoją obok siebie.
+ */
+export interface LogEntry {
+  /** Stabilny klucz Reacta — NIE indeks: wpisy dochodzą i są wymieniane. */
+  key: string;
+  exerciseId: string;
+  exerciseName: string;
+  unit: "REPS" | "SEC";
+  tracksRpe: boolean;
+  origin: "planned" | "substitute" | "extra";
+  substitutedExerciseId: string | null;
+  /** Nazwa zastąpionego — do etykiety „zamiast: …". `null` poza zamianą. */
+  substitutedExerciseName: string | null;
+  /** Cel z planu — podpowiedź, nie ograniczenie. `null` dla `extra`. */
+  plannedSets: number | null;
+  expectedReps: number | null;
+  note: string | null;
+  isDropsetItem: boolean;
+  sets: SetDraft[];
 }
 
 // ============================================================
@@ -120,6 +154,47 @@ export function toLoggingEntries(session: SessionDetailView): LoggingEntry[] {
         note: item.note,
         isDropsetItem: isDropset,
         tracksRpe: item.tracksRpe,
+      });
+    }
+  }
+  return entries;
+}
+
+/**
+ * `toLoggingEntries` ewoluuje w następcę: to samo spłaszczenie (w dropsecie
+ * liczbę serii niesie BLOK, w single/superset — pozycja), plus pola, których
+ * stan formularza teraz potrzebuje. Każdy wpis wraca z `origin: "planned"`
+ * i pustym wskaźnikiem zamiany — wymianę i dodatek dokłada dopiero formularz
+ * (Zadanie 8), ta funkcja tylko SIEJE stan z planu. `sets` startuje jako
+ * `plannedSets` pustych wierszy — dotąd robił to inicjalizator `useState`
+ * w trasie (`Array.from({ length: entry.expectedSets }, () => ({ reps: "",
+ * … }))`); tu jest to samo, ale przetestowane i bez duplikatu w dwóch plikach.
+ */
+export function toLogEntries(session: SessionDetailView): LogEntry[] {
+  const entries: LogEntry[] = [];
+  for (const block of session.blocks) {
+    const isDropset = block.kind === "dropset";
+    for (const item of block.items) {
+      const plannedSets = isDropset ? (block.sets ?? 1) : (item.sets ?? 1);
+      entries.push({
+        key: item.id,
+        exerciseId: item.exerciseId,
+        exerciseName: item.exerciseName,
+        unit: item.unit,
+        tracksRpe: item.tracksRpe,
+        origin: "planned",
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets,
+        expectedReps: item.reps,
+        note: item.note,
+        isDropsetItem: isDropset,
+        sets: Array.from({ length: plannedSets }, () => ({
+          reps: "",
+          difficulty: "",
+          skipped: false,
+          videoFileId: null,
+        })),
       });
     }
   }
@@ -271,6 +346,55 @@ export interface SaveSetInput {
 export interface SaveExerciseLogInput {
   exerciseId: string;
   sets: SaveSetInput[];
+}
+
+export interface LogPayloadExercise {
+  exerciseId: string;
+  origin: "planned" | "substitute" | "extra";
+  substitutedExerciseId: string | null;
+  sets: SaveSetInput[];
+}
+
+/**
+ * Ciało `exercises` zapisu, budowane z WPISÓW (`DraftEntry`, więc też z jego
+ * nadzbioru `LogEntry`) — dotąd 60 linii wewnątrz `try` akcji trasy. Trzy
+ * reguły: (1) wpis bez ani jednej wypełnionej serii wypada z ładunku
+ * CAŁKOWICIE — inaczej poleciałoby `sets: []` za ćwiczenie, którego nikt nie
+ * tknął; (2) `ordinal` to POZYCJA W TABLICY `entry.sets`, nie przenumerowanie
+ * po odfiltrowaniu — seria pominięta w środku zostawia DZIURĘ, którą szczegół
+ * czyta jako „nie zrobiono", a seria dołożona ponad `plannedSets` dostaje po
+ * prostu kolejny indeks; (3) `origin`/`substitutedExerciseId` przechodzą bez
+ * zmian — to one dają backendowi `SUBSTITUTED_EXERCISE_ALSO_LOGGED` (N14) za
+ * darmo, bo zamieniony wpis nigdy nie trafia do `entries` osobno (wymiana
+ * podmienia W MIEJSCU).
+ *
+ * Zakłada wpisy PO walidacji akcji: seria uznana tu za wypełnioną (`reps`
+ * niepuste i nie `skipped`) ma już mieć poprawny zakres i — gdy `tracksRpe` —
+ * wypełnioną trudność. Komunikaty o złym wpisaniu zostają w akcji, bo tam są
+ * nazwa ćwiczenia i numer serii potrzebne do zdania po polsku.
+ */
+export function buildLogPayload(entries: DraftEntry[]): LogPayloadExercise[] {
+  const payload: LogPayloadExercise[] = [];
+  for (const entry of entries) {
+    const sets: SaveSetInput[] = [];
+    entry.sets.forEach((set, ordinal) => {
+      if (set.skipped || set.reps.trim() === "") return;
+      sets.push({
+        ordinal,
+        reps: Number(set.reps),
+        difficulty: entry.tracksRpe && set.difficulty !== "" ? Number(set.difficulty) : null,
+        videoFileId: set.videoFileId,
+      });
+    });
+    if (sets.length === 0) continue;
+    payload.push({
+      exerciseId: entry.exerciseId,
+      origin: entry.origin,
+      substitutedExerciseId: entry.substitutedExerciseId,
+      sets,
+    });
+  }
+  return payload;
 }
 
 /**

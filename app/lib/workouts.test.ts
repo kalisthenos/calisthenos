@@ -13,7 +13,11 @@ vi.mock("~/lib/env", () => ({
 
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
+import type { SetDraft } from "./log-draft";
 import {
+  type LogEntry,
+  WorkoutSaveError,
+  buildLogPayload,
   listMyLogs,
   listTraineeLogs,
   loadMyActivePlan,
@@ -21,8 +25,8 @@ import {
   loadSessionForLogging,
   loadTraineeLog,
   saveWorkoutLog,
+  toLogEntries,
   toLoggingEntries,
-  WorkoutSaveError,
 } from "./workouts";
 
 function klient(reguly: (req: Request) => Response | Promise<Response>) {
@@ -340,6 +344,134 @@ describe("toLoggingEntries — spłaszczenie sesji do wpisów formularza", () =>
     });
 
     expect(wpisy.map((w) => [w.expectedSets, w.isDropsetItem])).toEqual([[4, false]]);
+  });
+});
+
+describe("toLogEntries — następca toLoggingEntries, z pochodzeniem i pustymi seriami", () => {
+  it("przenosi to, co toLoggingEntries, i dokłada origin, klucz oraz puste serie w liczbie planowanej", () => {
+    // `toLogEntries` zastąpi `toLoggingEntries` w Zadaniu 8 (trasa). Do tego czasu obie
+    // funkcje stoją obok siebie — `toLoggingEntries` zostaje jedynym, co czyta dzisiejsza
+    // trasa, więc ruszenie jej złamałoby więcej niż cztery znane błędy typów (STAN DRZEWA
+    // Zadania 5). `key` bierze się z `planItemId`, `plannedSets` z dawnego `expectedSets`.
+    const pustaSeria = { reps: "", difficulty: "", skipped: false, videoFileId: null };
+
+    expect(toLogEntries(SESJA)).toEqual([
+      {
+        key: "i-1",
+        exerciseId: "e-1",
+        exerciseName: "Pull-up",
+        unit: "REPS",
+        tracksRpe: true,
+        origin: "planned",
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets: 3,
+        expectedReps: 8,
+        note: "kontrola na dole",
+        isDropsetItem: false,
+        sets: [pustaSeria, pustaSeria, pustaSeria],
+      },
+      {
+        key: "i-2",
+        exerciseId: "e-2",
+        exerciseName: "Dip",
+        unit: "REPS",
+        tracksRpe: false,
+        origin: "planned",
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets: 2,
+        expectedReps: 10,
+        note: null,
+        isDropsetItem: true,
+        sets: [pustaSeria, pustaSeria],
+      },
+      {
+        key: "i-3",
+        exerciseId: "e-3",
+        exerciseName: "Push-up",
+        unit: "REPS",
+        tracksRpe: false,
+        origin: "planned",
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets: 2,
+        expectedReps: 15,
+        note: null,
+        isDropsetItem: true,
+        sets: [pustaSeria, pustaSeria],
+      },
+    ]);
+  });
+});
+
+function seria(overrides: Partial<SetDraft> = {}): SetDraft {
+  return { reps: "8", difficulty: "7", skipped: false, videoFileId: null, ...overrides };
+}
+
+function wpis(overrides: Partial<LogEntry> = {}): LogEntry {
+  return {
+    key: "i-1",
+    exerciseId: "e-1",
+    exerciseName: "Pull-up",
+    unit: "REPS",
+    tracksRpe: true,
+    origin: "planned",
+    substitutedExerciseId: null,
+    substitutedExerciseName: null,
+    plannedSets: 3,
+    expectedReps: 8,
+    note: null,
+    isDropsetItem: false,
+    sets: [seria(), seria(), seria()],
+    ...overrides,
+  };
+}
+
+describe("buildLogPayload — ładunek zapisu budowany POZA akcją trasy", () => {
+  it("wpis planowany niesie origin planned i pusty wskaźnik", () => {
+    expect(buildLogPayload([wpis()])[0]).toMatchObject({
+      origin: "planned",
+      substitutedExerciseId: null,
+    });
+  });
+
+  it("zamiennik niesie wskaźnik na zastąpione ćwiczenie", () => {
+    const payload = buildLogPayload([
+      wpis({ exerciseId: "z", origin: "substitute", substitutedExerciseId: "a" }),
+    ]);
+    expect(payload[0]).toMatchObject({ exerciseId: "z", substitutedExerciseId: "a" });
+  });
+
+  it("ćwiczenie zastąpione NIE trafia do ładunku", () => {
+    // N14 po stronie backendu: „zamiast" i „oraz" wykluczają się. Wymiana
+    // zastępuje wpis w miejscu, więc to wychodzi samo — ten test pilnuje, żeby
+    // wyszło samo także po przyszłej zmianie kształtu stanu.
+    const payload = buildLogPayload([
+      wpis({ exerciseId: "z", origin: "substitute", substitutedExerciseId: "a" }),
+      wpis({ exerciseId: "b" }),
+    ]);
+    expect(payload.map((e) => e.exerciseId)).toEqual(["z", "b"]);
+  });
+
+  it("serie pominięte zostawiają DZIURĘ w ordinalach", () => {
+    // Dziura znaczy serię pominiętą i ma przeżyć zapis — `ordinal` jest pozycją
+    // PLANOWANĄ, nie indeksem w tablicy.
+    const payload = buildLogPayload([
+      wpis({ sets: [seria({ reps: "8" }), seria({ reps: "" }), seria({ reps: "6" })] }),
+    ]);
+    expect(payload[0]!.sets.map((s) => s.ordinal)).toEqual([0, 2]);
+  });
+
+  it("serie dołożone ponad plan dostają kolejne ordinale", () => {
+    const payload = buildLogPayload([wpis({ plannedSets: 2, sets: [seria(), seria(), seria()] })]);
+    expect(payload[0]!.sets.map((s) => s.ordinal)).toEqual([0, 1, 2]);
+  });
+
+  it("wpis bez ani jednej wypełnionej serii wypada z ładunku", () => {
+    // Inaczej backend odmówiłby całemu logowi (`EMPTY_WORKOUT_LOG` dotyczy
+    // całości, ale ćwiczenie bez serii jest dla agregatu wyrażalne i bezużyteczne).
+    expect(buildLogPayload([wpis({ sets: [seria({ reps: "" })] })])).toEqual([]);
   });
 });
 
