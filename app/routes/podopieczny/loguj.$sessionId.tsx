@@ -1,40 +1,93 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ActionFunctionArgs,
   Form,
-  isRouteErrorResponse,
   Link,
+  type LoaderFunctionArgs,
+  isRouteErrorResponse,
   redirect,
   useActionData,
   useLoaderData,
   useNavigation,
   useRouteError,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { z } from "zod";
+import { ExercisePicker } from "~/components/exercise-picker";
 import { Icons } from "~/components/icons";
 import { LogExerciseCard } from "~/components/log-exercise-card";
 import type { VideoUploadState } from "~/components/video-upload-field";
 import { requireUser } from "~/lib/api/auth";
+import type { PickableExercise } from "~/lib/exercises";
 import { maxUploadBytesFor } from "~/lib/file-uploads";
-import { pluralizePl, todayISO, type PlForms } from "~/lib/format";
+import { type PlForms, pluralizePl, todayISO } from "~/lib/format";
 import {
+  type DraftEntry,
+  type SetDraft,
   draftHasContent,
   draftKey,
   parseDraft,
   serializeDraft,
-  type SetDraft,
 } from "~/lib/log-draft";
 import {
+  type LogEntry,
+  WorkoutSaveError,
+  buildLogPayload,
   loadSessionForLogging,
   saveWorkoutLog,
-  toLoggingEntries,
-  WorkoutSaveError,
+  toLogEntries,
 } from "~/lib/workouts";
 
 const PerformedOnSchema = z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Nieprawidłowa data.");
 const NoteSchema = z.string().max(2000).optional();
 const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+/**
+ * Deskryptor wpisu — KSZTAŁT formularza przysłany przez klienta w ukrytym polu
+ * `entries`, nie źródło prawdy o treningu.
+ *
+ * **Dlaczego z formularza, a nie wyprowadzone z planu w akcji:** od „sesji poza
+ * planem" lista ćwiczeń formularza przestała być odbiciem sesji. Akcja nie ma
+ * jak znać wpisu spoza planu — z definicji nie ma go w sesji — ani tego, ile
+ * wierszy podopieczny dołożył ponad plan. Deskryptory mówią więc wyłącznie
+ * dwie rzeczy: KTÓRE pola odczytać (`setCount`) i jak ułożyć komunikat po
+ * polsku (`exerciseName`, `tracksRpe`).
+ *
+ * **Czego NIE rozstrzygają:** przynależności ćwiczenia do sesji (N5′), reguł
+ * oceny trudności (N2, po `origin` z BIBLIOTEKI, nie z deskryptora), poprawności
+ * wskaźnika zamiany (N13, N14) ani sufitów rozmiaru (N15). To wszystko
+ * egzekwuje backend na własnych faktach. Najgorszy skutek podrobionego
+ * deskryptora jest więc taki, że komunikat w formularzu będzie mniej trafny niż
+ * `409`, który i tak przyjdzie.
+ *
+ * `plannedSets` jest w deskryptorze PONAD listę z planu wdrożenia, bo bez niego
+ * akcja nie umie policzyć `allDone` zgodnie z regułą „wiersze ponad plan nie
+ * mogą go zepsuć" — nie ma jak odróżnić wiersza planowanego od dołożonego.
+ * `allDone` i tak jest flagą deklarowaną przez klienta (`LogWorkoutDto`), więc
+ * podrobienie go nie otwiera niczego, czego nie dałoby się zrobić wprost.
+ */
+const DescriptorSchema = z.object({
+  exerciseId: z.string().min(1),
+  exerciseName: z.string(),
+  unit: z.enum(["REPS", "SEC"]),
+  tracksRpe: z.boolean(),
+  origin: z.enum(["planned", "substitute", "extra"]),
+  substitutedExerciseId: z.string().min(1).nullable(),
+  /** Cel z planu; `null` dla wpisu spoza planu. */
+  plannedSets: z.number().int().min(0).max(1000).nullable(),
+  /** Ile wierszy serii formularz naprawdę wyrenderował. */
+  setCount: z.number().int().min(0).max(1000),
+});
+
+/**
+ * Górne ograniczenia są tu wyłącznie po to, żeby podrobiony ładunek nie kazał
+ * akcji przemielić miliona nieistniejących pól — NIE są odtworzeniem sufitów
+ * domenowych (N15: 50 serii na ćwiczenie, 20 wpisów spoza planu). Te pilnuje
+ * backend i wracają jako `400` z `details.limit`; celowo są niższe niż to, co
+ * przepuszczamy tutaj, żeby nikt nie wziął tej liczby za regułę produktu.
+ */
+const DescriptorsSchema = z.array(DescriptorSchema).max(200);
+
+type Descriptor = z.infer<typeof DescriptorSchema>;
 
 export async function loader(args: LoaderFunctionArgs) {
   const { api, user } = requireUser(args.context, { role: "trainee" });
@@ -44,7 +97,9 @@ export async function loader(args: LoaderFunctionArgs) {
   return {
     user,
     session: { id: session.id, name: session.name },
-    entries: toLoggingEntries(session),
+    // Wpisy PLANU — punkt wyjścia stanu formularza i jedyne, do czego wraca
+    // „Cofnij wymianę" i „Wyczyść szkic".
+    entries: toLogEntries(session),
     // Klient egzekwuje ten sam limit co serwer PRZED wysłaniem — za duże nagranie
     // nie opuszcza urządzenia (unikamy zerwanego uploadu: timeout proxy / OOM).
     maxVideoBytes: maxUploadBytesFor("set_video"),
@@ -59,9 +114,12 @@ export async function loader(args: LoaderFunctionArgs) {
 export async function action(args: ActionFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainee" });
 
+  // Sesja jest tu nadal wczytywana, choć KSZTAŁTU formularza już z niej nie
+  // wyprowadzamy: daje `404` przed zapisem (cudza albo nieistniejąca sesja
+  // trafia do `ErrorBoundary`, nie w komunikat pod formularzem) i kanoniczne
+  // `planSessionId`.
   const session = await loadSessionForLogging(api, args.params.sessionId ?? "");
   if (!session) throw new Response("not found", { status: 404 });
-  const entries = toLoggingEntries(session);
 
   const fd = await args.request.formData();
   const performedOnParse = PerformedOnSchema.safeParse(fd.get("performedOn"));
@@ -79,28 +137,30 @@ export async function action(args: ActionFunctionArgs) {
       ? idempotencyKeyRaw
       : undefined;
 
-  try {
-    const exercisesPayload: Array<{
-      exerciseId: string;
-      sets: Array<{
-        ordinal: number;
-        reps: number;
-        difficulty: number | null;
-        videoFileId: string | null;
-      }>;
-    }> = [];
+  // Deskryptory idą przez Zoda, nie przez samo `JSON.parse`: ukryte pole jest
+  // tym samym rodzajem wejścia co ciało żądania (i co `sessionStorage`).
+  const descriptorsRaw = fd.get("entries");
+  const descriptorsParse = DescriptorsSchema.safeParse(
+    safeJson(typeof descriptorsRaw === "string" ? descriptorsRaw : null),
+  );
+  if (!descriptorsParse.success) {
+    return { error: "Nie udało się odczytać listy ćwiczeń. Odśwież stronę i spróbuj ponownie." };
+  }
+  const descriptors: Descriptor[] = descriptorsParse.data;
 
-    let anySetLogged = false;
+  try {
+    const logged: DraftEntry[] = [];
+    // Zaczyna od prawdy i psuje się na PIERWSZYM pustym wierszu planowanym.
+    // Wiersze ponad plan i całe wpisy `extra` nie mają jak go zepsuć — mogą
+    // wyłącznie dołożyć wykonanie ponad to, o co prosił plan.
     let allSetsFilled = true;
 
-    for (const [eIdx, entry] of entries.entries()) {
-      const sets: Array<{
-        ordinal: number;
-        reps: number;
-        difficulty: number | null;
-        videoFileId: string | null;
-      }> = [];
-      for (let sIdx = 0; sIdx < entry.expectedSets; sIdx++) {
+    for (const [eIdx, descriptor] of descriptors.entries()) {
+      const countsTowardsPlan = descriptor.origin !== "extra" && descriptor.plannedSets != null;
+      const plannedRows = countsTowardsPlan ? (descriptor.plannedSets ?? 0) : 0;
+      const sets: SetDraft[] = [];
+
+      for (let sIdx = 0; sIdx < descriptor.setCount; sIdx++) {
         const repsRaw = fd.get(`e_${eIdx}_s_${sIdx}_reps`);
         const diffRaw = fd.get(`e_${eIdx}_s_${sIdx}_diff`);
         // Po rozdzieleniu uploadu formularz niesie już tylko IDENTYFIKATOR nagrania —
@@ -113,13 +173,17 @@ export async function action(args: ActionFunctionArgs) {
         const hasDiff = diffRaw != null && diffRaw !== "";
         const hasVideo = videoId != null;
 
-        const tracksRpe = entry.tracksRpe;
+        const tracksRpe = descriptor.tracksRpe;
 
         // Pusty wiersz: dla ćwiczeń z RPE „pusty” = brak reps/diff/wideo;
         // dla ćwiczeń bez RPE „pusty” = brak reps/wideo (trudności i tak nie ma).
         const isBlank = tracksRpe ? !hasReps && !hasDiff && !hasVideo : !hasReps && !hasVideo;
         if (isBlank) {
-          allSetsFilled = false;
+          if (sIdx < plannedRows) allSetsFilled = false;
+          // Pusty wiersz JEDZIE do `buildLogPayload` i wypada tam z ładunku —
+          // dzięki temu dziura w `ordinal` zostaje dziurą („seria pominięta"),
+          // a nie przenumerowaniem serii następnych.
+          sets.push({ reps: "", difficulty: "", skipped: false, videoFileId: null });
           continue;
         }
 
@@ -127,36 +191,53 @@ export async function action(args: ActionFunctionArgs) {
         if (!hasReps || (tracksRpe && !hasDiff)) {
           return {
             error: tracksRpe
-              ? `Ćwiczenie ${entry.exerciseName}, seria #${sIdx + 1}: uzupełnij liczbę powtórzeń i trudność (1-10).`
-              : `Ćwiczenie ${entry.exerciseName}, seria #${sIdx + 1}: uzupełnij liczbę powtórzeń.`,
+              ? `Ćwiczenie ${descriptor.exerciseName}, seria #${sIdx + 1}: uzupełnij liczbę powtórzeń i trudność (1-10).`
+              : `Ćwiczenie ${descriptor.exerciseName}, seria #${sIdx + 1}: uzupełnij liczbę powtórzeń.`,
           };
         }
 
         const reps = Number(repsRaw);
         if (!Number.isFinite(reps) || reps < 1 || reps > 1000) {
           return {
-            error: `Ćwiczenie ${entry.exerciseName}, seria #${sIdx + 1}: liczba powtórzeń poza zakresem (1-1000).`,
+            error: `Ćwiczenie ${descriptor.exerciseName}, seria #${sIdx + 1}: liczba powtórzeń poza zakresem (1-1000).`,
           };
         }
 
-        let difficulty: number | null = null;
+        let difficulty = "";
         if (tracksRpe) {
-          difficulty = Number(diffRaw);
-          if (!Number.isFinite(difficulty) || difficulty < 1 || difficulty > 10) {
+          const parsed = Number(diffRaw);
+          if (!Number.isFinite(parsed) || parsed < 1 || parsed > 10) {
             return {
-              error: `Ćwiczenie ${entry.exerciseName}, seria #${sIdx + 1}: trudność musi być 1-10.`,
+              error: `Ćwiczenie ${descriptor.exerciseName}, seria #${sIdx + 1}: trudność musi być 1-10.`,
             };
           }
+          difficulty = String(parsed);
         }
 
-        sets.push({ ordinal: sIdx, reps, difficulty, videoFileId: videoId });
-        anySetLogged = true;
+        sets.push({ reps: String(reps), difficulty, skipped: false, videoFileId: videoId });
       }
 
-      exercisesPayload.push({ exerciseId: entry.exerciseId, sets });
+      // Wpis planowany przysłany z mniejszą liczbą wierszy, niż planował trener
+      // (dziś niewyrażalne w UI — „–" nie tyka wierszy planu — ale deskryptory
+      // są danymi od klienta): brakujące wiersze to serie niezrobione.
+      if (descriptor.setCount < plannedRows) allSetsFilled = false;
+
+      logged.push({
+        exerciseId: descriptor.exerciseId,
+        exerciseName: descriptor.exerciseName,
+        unit: descriptor.unit,
+        tracksRpe: descriptor.tracksRpe,
+        origin: descriptor.origin,
+        substitutedExerciseId: descriptor.substitutedExerciseId,
+        sets,
+      });
     }
 
-    if (!anySetLogged) {
+    // Wpis bez ani jednej wypełnionej serii wypada z ładunku CAŁKOWICIE — także
+    // zamiennik, którego podopieczny ostatecznie nie zrobił. Wtedy log nie niesie
+    // ani zamiennika, ani wskaźnika na zastąpione, więc N14 nie ma o co zahaczyć.
+    const exercisesPayload = buildLogPayload(logged);
+    if (exercisesPayload.length === 0) {
       return { error: "Zapisz co najmniej jedną serię." };
     }
 
@@ -189,13 +270,104 @@ export async function action(args: ActionFunctionArgs) {
   }
 }
 
+function safeJson(raw: string | null): unknown {
+  if (raw == null) return null;
+  try {
+    return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+}
+
 type SetState = SetDraft;
 
 const CWICZENIE: PlForms = { one: "ćwiczenie", few: "ćwiczenia", many: "ćwiczeń" };
 const SERIA: PlForms = { one: "seria", few: "serie", many: "serii" };
 
+const blankSet = (): SetState => ({
+  reps: "",
+  difficulty: "",
+  skipped: false,
+  videoFileId: null,
+});
+
+const blankSets = (count: number): SetState[] => Array.from({ length: count }, blankSet);
+
+/** Kształt, który jedzie w ukrytym polu `entries` — patrz `DescriptorSchema`. */
+function descriptorOf(entry: LogEntry): Descriptor {
+  return {
+    exerciseId: entry.exerciseId,
+    exerciseName: entry.exerciseName,
+    unit: entry.unit,
+    tracksRpe: entry.tracksRpe,
+    origin: entry.origin,
+    substitutedExerciseId: entry.substitutedExerciseId,
+    plannedSets: entry.plannedSets,
+    setCount: entry.sets.length,
+  };
+}
+
+/**
+ * Szkic wozi `DraftEntry` — wszystko, co trzeba ZAPISAĆ — ale nie wozi pól,
+ * które służą wyłącznie do NARYSOWANIA karty (`plannedSets`, `expectedReps`,
+ * `note`, `isDropsetItem`, nazwa zastąpionego). Te wracają z planu.
+ *
+ * Dopasowanie idzie KURSOREM po wpisach planu, nie po indeksie tablicy szkicu:
+ * wpisy `extra` doklejają się na końcu i nie mają odpowiednika w planie, a wpis
+ * `planned`/`substitute` stoi dokładnie tam, gdzie stała pozycja planu (wymiana
+ * podmienia W MIEJSCU). Szkic o kształcie, którego nasze operacje nigdy nie
+ * wytwarzają, degraduje się do wpisu `extra` bez wskaźnika zamiany — czyli do
+ * czegoś, czego backend na pewno nie odrzuci jako źle postawionej zamiany.
+ */
+function rehydrateEntries(planEntries: LogEntry[], draft: DraftEntry[]): LogEntry[] {
+  let cursor = 0;
+  return draft.map((d, i) => {
+    const base = d.origin === "extra" ? undefined : planEntries[cursor++];
+    if (base == null) {
+      return {
+        key: `extra:r${i}`,
+        exerciseId: d.exerciseId,
+        exerciseName: d.exerciseName,
+        unit: d.unit,
+        tracksRpe: d.tracksRpe,
+        origin: "extra" as const,
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets: null,
+        expectedReps: null,
+        note: null,
+        isDropsetItem: false,
+        sets: d.sets,
+      };
+    }
+    return {
+      key: base.key,
+      exerciseId: d.exerciseId,
+      exerciseName: d.exerciseName,
+      unit: d.unit,
+      tracksRpe: d.tracksRpe,
+      origin: d.origin,
+      substitutedExerciseId: d.substitutedExerciseId,
+      substitutedExerciseName: d.origin === "substitute" ? base.exerciseName : null,
+      plannedSets: base.plannedSets,
+      expectedReps: base.expectedReps,
+      note: base.note,
+      isDropsetItem: base.isDropsetItem,
+      sets: d.sets,
+    };
+  });
+}
+
+type PickerState = { mode: "swap"; key: string } | { mode: "extra" };
+
 export default function LogForm() {
-  const { user, session, entries, maxVideoBytes, idempotencyKey } = useLoaderData<typeof loader>();
+  const {
+    user,
+    session,
+    entries: planEntries,
+    maxVideoBytes,
+    idempotencyKey,
+  } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const navigation = useNavigation();
   // `formMethod != null` zamiast `state !== "idle"`: łapie wyłącznie wysyłkę
@@ -204,158 +376,233 @@ export default function LogForm() {
   // „Zapisywanie…” także po kliknięciu „Anuluj”.
   const isSubmitting = navigation.formMethod != null;
 
-  // Lift set-level state up so we can compute progress + power the
-  // "copy from #1" affordance. The form's submit still relies on the
-  // name attributes on each input — we just control their values.
+  // Lista WPISÓW, nie macierz serii: od „sesji poza planem" może urosnąć
+  // (ćwiczenie spoza planu), a jej element może zostać podmieniony (wymiana
+  // W MIEJSCU). Wysyłkę nadal niosą atrybuty `name` pól — my sterujemy ich
+  // wartościami, a kształt listy jedzie osobno w ukrytym polu `entries`.
   //
-  // reps starts empty (placeholder shows the target); picking difficulty
-  // auto-fills reps with the target. This way an untouched row stays a
-  // clean "skipped" submission instead of forcing the trainee to clear
-  // pre-filled numbers.
-  const [setStates, setSetStates] = useState<SetState[][]>(() =>
-    entries.map((entry) =>
-      Array.from({ length: entry.expectedSets }, () => ({
-        reps: "",
-        difficulty: "",
-        skipped: false,
-        videoFileId: null,
-      })),
-    ),
-  );
+  // reps startuje puste (cel widać w placeholderze); wybór trudności dopełnia
+  // reps celem. Nietknięty wiersz zostaje więc czystym „pominięciem", zamiast
+  // kazać podopiecznemu kasować podstawione liczby.
+  const [entries, setEntries] = useState<LogEntry[]>(planEntries);
+  const [picker, setPicker] = useState<PickerState | null>(null);
+  // Numeruje klucze Reacta wpisów spoza planu. Nie `exerciseId`: to samo
+  // ćwiczenie wolno dołożyć raz, ale klucz musi przeżyć jego usunięcie
+  // i ponowne dodanie bez kolizji z instancją, która właśnie odchodzi.
+  const extraSeq = useRef(0);
+
+  const planExerciseIds = useMemo(() => planEntries.map((e) => e.exerciseId), [planEntries]);
 
   // Które pola aktualnie wysyłają nagranie — zapis jest zablokowany, dopóki cokolwiek
   // leci, żeby trening nie zapisał się bez wideo, na które podopieczny właśnie czeka.
+  // Klucz idzie po `entry.key`, nie po indeksie: wpisy da się teraz usuwać, a klucz
+  // po indeksie zostawiłby po usuniętym wpisie wieczne „trwa wysyłka".
   const [uploadingKeys, setUploadingKeys] = useState<Record<string, boolean>>({});
-  const uploadingCount = Object.values(uploadingKeys).filter(Boolean).length;
-
-  const handleVideoState = (eIdx: number, sIdx: number, state: VideoUploadState) => {
-    const key = `${eIdx}-${sIdx}`;
-    setUploadingKeys((prev) =>
-      Boolean(prev[key]) === state.uploading ? prev : { ...prev, [key]: state.uploading },
-    );
-    setSetStates((prev) => {
-      const current = prev[eIdx]?.[sIdx];
-      if (!current || current.videoFileId === state.fileId) return prev;
-      return prev.map((sets, i) =>
-        i === eIdx
-          ? sets.map((s, j) => (j === sIdx ? { ...s, videoFileId: state.fileId } : s))
-          : sets,
-      );
-    });
-  };
-
-  const updateSet = (eIdx: number, sIdx: number, patch: Partial<SetState>) => {
-    setSetStates((prev) =>
-      prev.map((sets, i) =>
-        i === eIdx ? sets.map((s, j) => (j === sIdx ? { ...s, ...patch } : s)) : sets,
-      ),
-    );
-  };
-
-  // Mark a set as explicitly skipped. Clears any partial input so it doesn't
-  // resurface if the trainee later "Cofnij"-clicks it (they'll start fresh).
-  const skipSet = (eIdx: number, sIdx: number) => {
-    setSetStates((prev) =>
-      prev.map((sets, i) =>
-        i === eIdx
-          ? sets.map((s, j) =>
-              // Pominięta seria traci też odniesienie do nagrania — wgrany plik zostaje
-              // sierotą i sprzątnie go sweeper.
-              j === sIdx ? { reps: "", difficulty: "", skipped: true, videoFileId: null } : s,
-            )
-          : sets,
-      ),
-    );
-  };
-
-  const unskipSet = (eIdx: number, sIdx: number) => {
-    setSetStates((prev) =>
-      prev.map((sets, i) =>
-        i === eIdx
-          ? sets.map((s, j) =>
-              j === sIdx ? { reps: "", difficulty: "", skipped: false, videoFileId: null } : s,
-            )
-          : sets,
-      ),
-    );
-  };
-
-  const copyFromFirst = (eIdx: number) => {
-    setSetStates((prev) =>
-      prev.map((sets, i) => {
-        if (i !== eIdx) return sets;
-        const first = sets[0];
-        if (!first || first.skipped) return sets;
-        return sets.map((s, j) =>
-          j === 0 || s.skipped
-            ? s
-            : {
-                reps: s.reps || first.reps,
-                difficulty: s.difficulty || first.difficulty,
-                skipped: false,
-                // NIE kopiujemy nagrania z pierwszej serii — jedno wgranie może być
-                // podpięte tylko do jednej serii, a duplikat jest odrzucany przy zapisie.
-                videoFileId: s.videoFileId,
-              },
-        );
-      }),
-    );
-  };
-
-  // Progress: filled = reps + difficulty set; skipped = explicitly opted-out.
-  // Pending = neither (still needs trainee attention before submit feels done).
-  const stats = useMemo(() => {
-    let total = 0;
-    let filled = 0;
-    let skipped = 0;
-    setStates.forEach((sets, eIdx) => {
-      const tracksRpe = entries[eIdx]?.tracksRpe ?? true;
-      for (const s of sets) {
-        total++;
-        if (s.skipped) skipped++;
-        else if (s.reps.trim() !== "" && (!tracksRpe || s.difficulty !== "")) filled++;
+  const uploadingCount = useMemo(() => {
+    let n = 0;
+    for (const entry of entries) {
+      for (let j = 0; j < entry.sets.length; j++) {
+        if (uploadingKeys[`${entry.key}-${j}`]) n++;
       }
-    });
-    return { total, filled, skipped };
-  }, [setStates, entries]);
+    }
+    return n;
+  }, [entries, uploadingKeys]);
 
-  const setCounts = useMemo(() => entries.map((e) => e.expectedSets), [entries]);
-  const exerciseIds = useMemo(() => entries.map((e) => e.exerciseId), [entries]);
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
   // Licznik przemontowań kart ćwiczeń. `VideoUploadField` trzyma stan wysyłki u siebie
   // i czyta `initialFileId` tylko raz, więc każde ZEWNĘTRZNE nadpisanie serii
-  // (przywrócenie szkicu, wyczyszczenie go) musi go przemontować. Pola tekstowe są
-  // kontrolowane przez `setStates`, więc remount karty niczego nie gubi.
+  // (przywrócenie szkicu, wyczyszczenie go, wymiana ćwiczenia, zdjęcie wiersza)
+  // musi go przemontować. Pola tekstowe są kontrolowane przez `entries`, więc
+  // remount karty niczego nie gubi.
   const [videoFieldsEpoch, setVideoFieldsEpoch] = useState(0);
+  const remountVideoFields = () => setVideoFieldsEpoch((n) => n + 1);
 
-  const emptyState = (): SetState[][] =>
-    entries.map((entry) =>
-      Array.from({ length: entry.expectedSets }, () => ({
-        reps: "",
-        difficulty: "",
-        skipped: false,
-        videoFileId: null,
-      })),
+  const patchEntry = (key: string, fn: (entry: LogEntry) => LogEntry) =>
+    setEntries((prev) => prev.map((entry) => (entry.key === key ? fn(entry) : entry)));
+
+  const patchSets = (key: string, fn: (sets: SetState[]) => SetState[]) =>
+    patchEntry(key, (entry) => ({ ...entry, sets: fn(entry.sets) }));
+
+  const handleVideoState = (key: string, sIdx: number, state: VideoUploadState) => {
+    const slot = `${key}-${sIdx}`;
+    setUploadingKeys((prev) =>
+      Boolean(prev[slot]) === state.uploading ? prev : { ...prev, [slot]: state.uploading },
+    );
+    setEntries((prev) =>
+      prev.map((entry) => {
+        if (entry.key !== key) return entry;
+        const current = entry.sets[sIdx];
+        if (!current || current.videoFileId === state.fileId) return entry;
+        return {
+          ...entry,
+          sets: entry.sets.map((s, j) => (j === sIdx ? { ...s, videoFileId: state.fileId } : s)),
+        };
+      }),
+    );
+  };
+
+  const updateSet = (key: string, sIdx: number, patch: Partial<SetState>) =>
+    patchSets(key, (sets) => sets.map((s, j) => (j === sIdx ? { ...s, ...patch } : s)));
+
+  // Mark a set as explicitly skipped. Clears any partial input so it doesn't
+  // resurface if the trainee later "Cofnij"-clicks it (they'll start fresh).
+  const skipSet = (key: string, sIdx: number) =>
+    // Pominięta seria traci też odniesienie do nagrania — wgrany plik zostaje
+    // sierotą i sprzątnie go sweeper.
+    patchSets(key, (sets) =>
+      sets.map((s, j) => (j === sIdx ? { ...blankSet(), skipped: true } : s)),
     );
 
+  const unskipSet = (key: string, sIdx: number) =>
+    patchSets(key, (sets) => sets.map((s, j) => (j === sIdx ? blankSet() : s)));
+
+  const copyFromFirst = (key: string) =>
+    patchSets(key, (sets) => {
+      const first = sets[0];
+      if (!first || first.skipped) return sets;
+      return sets.map((s, j) =>
+        j === 0 || s.skipped
+          ? s
+          : {
+              reps: s.reps || first.reps,
+              difficulty: s.difficulty || first.difficulty,
+              skipped: false,
+              // NIE kopiujemy nagrania z pierwszej serii — jedno wgranie może być
+              // podpięte tylko do jednej serii, a duplikat jest odrzucany przy zapisie.
+              videoFileId: s.videoFileId,
+            },
+      );
+    });
+
+  /** Kolejny wiersz PONAD plan. Sufit 50 (N15) pilnuje backend; przycisk gaśnie w karcie. */
+  const addSet = (key: string) => patchSets(key, (sets) => [...sets, blankSet()]);
+
+  /**
+   * Zdejmuje wiersz. Karta podaje `onRemove` wyłącznie dla wiersza ponad plan,
+   * ale warunek stoi też tutaj — wiersz planowany zostawiony pusty JEST
+   * informacją („seria pominięta"), a nie śmieciem do posprzątania.
+   */
+  const removeSet = (key: string, sIdx: number) => {
+    patchEntry(key, (entry) => {
+      if (sIdx < (entry.plannedSets ?? 1)) return entry;
+      return { ...entry, sets: entry.sets.filter((_, j) => j !== sIdx) };
+    });
+    remountVideoFields();
+  };
+
+  /**
+   * Wymiana ćwiczenia — podmienia wpis W MIEJSCU, nie dokłada się obok niego.
+   * Dzięki temu ćwiczenie zastąpione nigdy nie jedzie w logu jako `planned`,
+   * więc `SUBSTITUTED_EXERCISE_ALSO_LOGGED` (N14) nie ma o co zahaczyć,
+   * kolejność ćwiczeń zostaje z planu, a pasek postępu liczy się bez wyjątków.
+   *
+   * Serie CZYŚCIMY, liczbę wierszy zostawiamy: zamiennik może mieć inną flagę
+   * oceny trudności, więc wiersze wypełnione pod stare ćwiczenie byłyby
+   * niepoprawne — ale cel serii z planu nadal obowiązuje.
+   *
+   * Druga wymiana pod rząd NIE robi łańcucha: wskaźnik dalej pokazuje ćwiczenie
+   * z PLANU, bo tylko takie przechodzi N13 („zastąpione stoi w tej sesji").
+   * Z tego samego powodu karta pokazuje „Wymień" WYŁĄCZNIE przy wpisie z planu:
+   * wskaźnik na ćwiczenie spoza sesji odbiłby się o N13, a wpis spoza planu
+   * poprawia się usunięciem i dodaniem właściwego.
+   */
+  const swapEntry = (key: string, picked: PickableExercise) => {
+    patchEntry(key, (entry) => ({
+      ...entry,
+      exerciseId: picked.id,
+      exerciseName: picked.name,
+      unit: picked.unit,
+      tracksRpe: picked.tracksRpe,
+      origin: "substitute",
+      substitutedExerciseId:
+        entry.origin === "substitute" ? entry.substitutedExerciseId : entry.exerciseId,
+      substitutedExerciseName:
+        entry.origin === "substitute" ? entry.substitutedExerciseName : entry.exerciseName,
+      sets: blankSets(entry.sets.length),
+    }));
+    remountVideoFields();
+  };
+
+  /** Przywraca wpis z planu po tym samym kluczu — z planową liczbą pustych wierszy. */
+  const undoSwap = (key: string) => {
+    const base = planEntries.find((p) => p.key === key);
+    if (!base) return;
+    patchEntry(key, () => ({ ...base, sets: blankSets(base.plannedSets ?? 1) }));
+    remountVideoFields();
+  };
+
+  /** Ćwiczenie spoza planu — na KOŃCU listy, bez celu, z jednym pustym wierszem. */
+  const addExtraEntry = (picked: PickableExercise) => {
+    const key = `extra:n${extraSeq.current++}`;
+    setEntries((prev) => [
+      ...prev,
+      {
+        key,
+        exerciseId: picked.id,
+        exerciseName: picked.name,
+        unit: picked.unit,
+        tracksRpe: picked.tracksRpe,
+        origin: "extra",
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets: null,
+        expectedReps: null,
+        note: null,
+        isDropsetItem: false,
+        sets: [blankSet()],
+      },
+    ]);
+  };
+
+  /**
+   * Usuwa wpis — WYŁĄCZNIE spoza planu. Bez tego pomyłka w wybieraku jest nie do
+   * cofnięcia bez przeładowania strony, czyli utraty całego formularza. Wpisu
+   * z planu usunąć nie wolno: pominięcie ćwiczenia wyraża się pustymi seriami.
+   */
+  const removeEntry = (key: string) => {
+    setEntries((prev) => prev.filter((entry) => entry.key !== key || entry.origin !== "extra"));
+  };
+
+  // Progress: filled = reps + difficulty set; skipped = explicitly opted-out.
+  // Pending = neither (still needs trainee attention before submit feels done).
+  //
+  // Pasek liczy WSZYSTKIE wiersze formularza — także dołożone ponad plan i te
+  // z ćwiczeń spoza planu — a `allDone` w ładunku liczy wyłącznie wiersze
+  // planowane (akcja wyżej). Asymetria jest celowa i idzie w stronę bezpieczną:
+  // zielony pasek zawsze znaczy `allDone`, ale `allDone` nie musi znaczyć
+  // zielonego paska. Odwrotnie byłoby kłamstwem o wykonaniu planu.
+  const stats = useMemo(() => {
+    let total = 0;
+    let filled = 0;
+    let skipped = 0;
+    for (const entry of entries) {
+      for (const s of entry.sets) {
+        total++;
+        if (s.skipped) skipped++;
+        else if (s.reps.trim() !== "" && (!entry.tracksRpe || s.difficulty !== "")) filled++;
+      }
+    }
+    return { total, filled, skipped };
+  }, [entries]);
+
   // Po hydracji: przywróć szkic z sessionStorage — tylko gdy pasuje do bieżącego
-  // planu (te same ćwiczenia w tej samej kolejności + liczby serii) i cokolwiek
-  // zawiera. Celowo NIE w inicjalizatorze useState — SSR renderuje pusto, więc
-  // odczyt storage tam rozjechałby hydrację.
+  // PLANU (te same ćwiczenia planu w tej samej kolejności) i cokolwiek zawiera.
+  // Liczba serii i pochodzenie wpisów jadą w samym szkicu i NIE są kryterium
+  // zgodności — to one są treścią wymiany i dodatku. Celowo NIE w inicjalizatorze
+  // useState — SSR renderuje pusto, więc odczyt storage tam rozjechałby hydrację.
   // biome-ignore lint/correctness/useExhaustiveDependencies: raz po zamontowaniu
   useEffect(() => {
     try {
       const restored = parseDraft(sessionStorage.getItem(draftKey(session.id)), {
-        exerciseIds,
-        setCounts,
+        planExerciseIds,
       });
       if (restored && draftHasContent(restored)) {
-        setSetStates(restored);
+        setEntries(rehydrateEntries(planEntries, restored));
         setRestoredDraft(true);
         // Pola wideo czytają `initialFileId` tylko przy montowaniu, a tu jesteśmy już
         // po hydracji — bez przemontowania przywrócone nagrania by się nie pokazały.
-        setVideoFieldsEpoch((n) => n + 1);
+        remountVideoFields();
       }
     } catch {
       // sessionStorage niedostępny (tryb prywatny itd.) — pomijamy przywracanie.
@@ -363,31 +610,59 @@ export default function LogForm() {
     setDraftReady(true);
   }, []);
 
-  // Zapisuj szkic przy każdej zmianie serii — ale dopiero PO próbie przywrócenia,
+  // Zapisuj szkic przy każdej zmianie wpisów — ale dopiero PO próbie przywrócenia,
   // żeby pusty stan startowy nie nadpisał zapisanego szkicu. Pusty stan czyścimy
   // zamiast zapisywać (mniej śmieci; spójne z „Wyczyść szkic").
   useEffect(() => {
     if (!draftReady) return;
     try {
-      if (draftHasContent(setStates)) {
-        sessionStorage.setItem(draftKey(session.id), serializeDraft(exerciseIds, setStates));
+      if (draftHasContent(entries)) {
+        sessionStorage.setItem(draftKey(session.id), serializeDraft(planExerciseIds, entries));
       } else {
         sessionStorage.removeItem(draftKey(session.id));
       }
     } catch {
       // Best-effort — brak storage nie może wywrócić logowania.
     }
-  }, [draftReady, setStates, session.id, exerciseIds]);
+  }, [draftReady, entries, session.id, planExerciseIds]);
 
+  // Wraca do NIETKNIĘTEGO planu: znikają też wymiany i ćwiczenia spoza planu,
+  // bo one też są treścią szkicu, a nie ozdobą nad nim.
   const clearDraft = () => {
-    setSetStates(emptyState());
+    setEntries(planEntries.map((e) => ({ ...e, sets: blankSets(e.plannedSets ?? 1) })));
     setRestoredDraft(false);
-    setVideoFieldsEpoch((n) => n + 1);
+    remountVideoFields();
     try {
       sessionStorage.removeItem(draftKey(session.id));
     } catch {
       // ignore
     }
+  };
+
+  const swapTarget =
+    picker?.mode === "swap" ? (entries.find((e) => e.key === picker.key) ?? null) : null;
+
+  // Wybierak nie może zaproponować ćwiczenia, które właśnie zastępujesz: wskaźnik
+  // pokazujący na samego siebie to `400 SUBSTITUTION_MISPLACED`, a użytkownik nie
+  // ma się o tym dowiadywać z błędu po zapisie. Odsiewamy więc i ćwiczenie
+  // widoczne teraz, i to z planu, które ten wpis już raz zastąpił.
+  //
+  // Dla dodatku spoza planu odsiewamy wszystko, co już jest w formularzu — druga
+  // karta tego samego ćwiczenia niczego nie wnosi, bo dodatkowe serie dokłada się
+  // przyciskiem „Dodaj serię" w karcie, która już stoi.
+  const pickerExcludeIds = useMemo(() => {
+    if (picker == null) return [];
+    if (picker.mode === "extra") return entries.map((e) => e.exerciseId);
+    if (swapTarget == null) return [];
+    return swapTarget.substitutedExerciseId == null
+      ? [swapTarget.exerciseId]
+      : [swapTarget.exerciseId, swapTarget.substitutedExerciseId];
+  }, [picker, entries, swapTarget]);
+
+  const handlePick = (picked: PickableExercise) => {
+    if (picker == null) return;
+    if (picker.mode === "extra") addExtraEntry(picked);
+    else swapEntry(picker.key, picked);
   };
 
   return (
@@ -405,7 +680,8 @@ export default function LogForm() {
           <h1>{session.name}</h1>
           <div className="sub">
             Zarejestruj wykonane serie. Pominięte serie nie wliczają się do statystyk — kliknij
-            „Pomiń" obok serii, której nie zrobiłeś.
+            „Pomiń" obok serii, której nie zrobiłeś. Zrobiłeś coś inaczej, niż planował trener?
+            Wymień ćwiczenie albo dorzuć własne.
           </div>
         </div>
       </div>
@@ -414,6 +690,9 @@ export default function LogForm() {
           a ten POST niesie już tylko tekst i identyfikatory plików. */}
       <Form method="post" style={{ display: "grid", gap: 14 }}>
         <input type="hidden" name="idempotencyKey" value={idempotencyKey} />
+        {/* Kształt formularza dla akcji — patrz `DescriptorSchema`. Bez tego akcja
+            nie ma jak wiedzieć o wpisie spoza planu ani o wierszu ponad plan. */}
+        <input type="hidden" name="entries" value={JSON.stringify(entries.map(descriptorOf))} />
         {restoredDraft && (
           <output
             className="card"
@@ -475,20 +754,30 @@ export default function LogForm() {
         ) : (
           entries.map((entry, eIdx) => (
             <LogExerciseCard
-              key={`${entry.planItemId}-${eIdx}-${videoFieldsEpoch}`}
+              key={`${entry.key}-${videoFieldsEpoch}`}
               entry={entry}
               eIdx={eIdx}
               totalEntries={entries.length}
-              sets={setStates[eIdx] ?? []}
               maxVideoBytes={maxVideoBytes}
-              onUpdateSet={(sIdx, patch) => updateSet(eIdx, sIdx, patch)}
-              onSkipSet={(sIdx) => skipSet(eIdx, sIdx)}
-              onUnskipSet={(sIdx) => unskipSet(eIdx, sIdx)}
-              onCopyFromFirst={() => copyFromFirst(eIdx)}
-              onVideoStateChange={(sIdx, state) => handleVideoState(eIdx, sIdx, state)}
+              onUpdateSet={(sIdx, patch) => updateSet(entry.key, sIdx, patch)}
+              onSkipSet={(sIdx) => skipSet(entry.key, sIdx)}
+              onUnskipSet={(sIdx) => unskipSet(entry.key, sIdx)}
+              onCopyFromFirst={() => copyFromFirst(entry.key)}
+              onVideoStateChange={(sIdx, state) => handleVideoState(entry.key, sIdx, state)}
+              onAddSet={() => addSet(entry.key)}
+              onRemoveSet={(sIdx) => removeSet(entry.key, sIdx)}
+              onSwap={() => setPicker({ mode: "swap", key: entry.key })}
+              onUndoSwap={() => undoSwap(entry.key)}
+              onRemoveEntry={() => removeEntry(entry.key)}
             />
           ))
         )}
+
+        <div>
+          <button type="button" className="btn" onClick={() => setPicker({ mode: "extra" })}>
+            <Icons.Plus /> Dodaj ćwiczenie spoza planu
+          </button>
+        </div>
 
         {actionData?.error != null && (
           <p role="alert" style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>
@@ -537,6 +826,24 @@ export default function LogForm() {
           </output>
         )}
       </Form>
+
+      {/* POZA formularzem, i to jest decyzja, nie porządki: modal ma pole szukajki,
+          a Enter w polu tekstowym wewnątrz `<form>` wysyła ten formularz. Natywny
+          `<dialog>` idzie do warstwy wierzchniej, ale zostaje w tym samym drzewie
+          formularza, więc jedynym pewnym rozwiązaniem jest wyjęcie go stąd.
+          Renderowany BEZWARUNKOWO — `open` przełącza widoczność, nie montaż:
+          odmontowanie gubi `useFetcher` i drugie otwarcie pyta o bibliotekę od nowa. */}
+      <ExercisePicker
+        open={picker != null}
+        onClose={() => setPicker(null)}
+        onPick={handlePick}
+        title={
+          picker?.mode === "swap"
+            ? `Zamiennik dla: ${swapTarget?.exerciseName ?? ""}`
+            : "Ćwiczenie spoza planu"
+        }
+        excludeIds={pickerExcludeIds}
+      />
 
       <div className="text-xs muted" style={{ marginTop: 18 }}>
         Zalogowany jako {user.displayName}.

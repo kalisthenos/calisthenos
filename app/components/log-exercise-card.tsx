@@ -1,37 +1,79 @@
 import { Icons } from "~/components/icons";
 import { VideoUploadField, type VideoUploadState } from "~/components/video-upload-field";
 import type { SetDraft } from "~/lib/log-draft";
+import type { LogEntry } from "~/lib/workouts";
 
 type SetState = SetDraft;
 
+/**
+ * Sufit serii na ćwiczenie z reguły domenowej BE (N15, `WORKOUT_LOG_LIMITS
+ * .setsPerExercise`). Kontrakt go NIE deklaruje, więc nie jest to walidacja —
+ * pole nie dostaje `max`, a akcja trasy niczego po nim nie odrzuca. Gaśnie
+ * wyłącznie PRZYCISK „Dodaj serię": odmowa `400` po wypełnieniu 51 wiersza
+ * byłaby karą za pracę, którą podopieczny już wykonał. Gdyby limit po tamtej
+ * stronie się zmienił, tutaj zrobi się co najwyżej przycisk gasnący za wcześnie
+ * albo za późno — nigdy utracony zapis.
+ */
+const MAX_SETS_PER_ENTRY = 50;
+
+/**
+ * Karta jednego ćwiczenia na ekranie logowania. Od „sesji poza planem" wpis nie
+ * jest już odbiciem pozycji planu, tylko STANEM formularza: może być zamiennikiem
+ * (`origin: "substitute"`), może pochodzić spoza planu (`"extra"`) i może mieć
+ * WIĘCEJ wierszy, niż planowano.
+ *
+ * Dwie rzeczy, które łatwo tu zepsuć:
+ *
+ * 1. **„–" zdejmuje wyłącznie wiersze PONAD plan.** Wiersz planowany zostaje —
+ *    pusty znaczy „seria pominięta", a dziura w `ordinal` jest informacją, którą
+ *    czyta szczegół treningu i delta plan↔wykonanie. Dla wpisu `extra` podłogą
+ *    jest jeden wiersz; całość zdejmuje się przyciskiem „Usuń".
+ * 2. **Wpisu `planned`/`substitute` NIE wolno usunąć.** Pominięcie ćwiczenia
+ *    wyraża się pustymi seriami, nie zniknięciem karty.
+ */
 export function LogExerciseCard({
   entry,
   eIdx,
   totalEntries,
-  sets,
   maxVideoBytes,
   onUpdateSet,
   onVideoStateChange,
   onSkipSet,
   onUnskipSet,
   onCopyFromFirst,
+  onAddSet,
+  onRemoveSet,
+  onSwap,
+  onUndoSwap,
+  onRemoveEntry,
 }: {
-  entry: import("~/lib/workouts").LoggingEntry;
+  entry: LogEntry;
   eIdx: number;
   totalEntries: number;
-  sets: SetState[];
   maxVideoBytes: number;
   onUpdateSet: (sIdx: number, patch: Partial<SetState>) => void;
   onVideoStateChange: (sIdx: number, state: VideoUploadState) => void;
   onSkipSet: (sIdx: number) => void;
   onUnskipSet: (sIdx: number) => void;
   onCopyFromFirst: () => void;
+  onAddSet: () => void;
+  onRemoveSet: (sIdx: number) => void;
+  onSwap: () => void;
+  onUndoSwap: () => void;
+  onRemoveEntry: () => void;
 }) {
-  const showCopyButton = entry.expectedSets > 1;
+  const sets = entry.sets;
+  const isExtra = entry.origin === "extra";
+  // Wiersze do tego indeksu należą do planu i są NIEUSUWALNE. Wpis spoza planu
+  // planu nie ma, więc podłogą jest jeden wiersz — inaczej dałoby się zostawić
+  // kartę bez ani jednego miejsca na wpisanie czegokolwiek.
+  const lockedRows = entry.plannedSets ?? 1;
+  const showCopyButton = sets.length > 1;
   const firstFilled =
     sets.length > 0 &&
     !sets[0]?.skipped &&
     (sets[0]?.reps?.trim() !== "" || sets[0]?.difficulty !== "");
+  const atSetCeiling = sets.length >= MAX_SETS_PER_ENTRY;
 
   return (
     <div className="card card-padless">
@@ -49,19 +91,29 @@ export function LogExerciseCard({
               Ćwiczenie {eIdx + 1}/{totalEntries}
             </span>
             {entry.isDropsetItem && <span className="badge">dropset</span>}
+            {entry.origin === "substitute" && (
+              <span className="badge">zamiast: {entry.substitutedExerciseName}</span>
+            )}
+            {isExtra && <span className="badge">spoza planu</span>}
           </div>
           <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{entry.exerciseName}</div>
-          <div className="text-xs muted" style={{ marginTop: 3 }}>
-            Cel:{" "}
-            <strong className="mono" style={{ color: "var(--ink)" }}>
-              {entry.expectedSets}
-            </strong>{" "}
-            seria(e) ×{" "}
-            <strong className="mono" style={{ color: "var(--ink)" }}>
-              {entry.expectedReps}
-            </strong>{" "}
-            {entry.unit === "SEC" ? "sek." : "powt."}
-          </div>
+          {entry.plannedSets != null && entry.expectedReps != null ? (
+            <div className="text-xs muted" style={{ marginTop: 3 }}>
+              Cel:{" "}
+              <strong className="mono" style={{ color: "var(--ink)" }}>
+                {entry.plannedSets}
+              </strong>{" "}
+              seria(e) ×{" "}
+              <strong className="mono" style={{ color: "var(--ink)" }}>
+                {entry.expectedReps}
+              </strong>{" "}
+              {entry.unit === "SEC" ? "sek." : "powt."}
+            </div>
+          ) : (
+            <div className="text-xs muted" style={{ marginTop: 3 }}>
+              Bez celu z planu — wpisz tyle serii, ile zrobiłeś.
+            </div>
+          )}
           {entry.note != null && entry.note.length > 0 && (
             <div
               style={{
@@ -75,32 +127,64 @@ export function LogExerciseCard({
             </div>
           )}
         </div>
-        {showCopyButton && (
-          <button
-            type="button"
-            onClick={onCopyFromFirst}
-            disabled={!firstFilled}
-            className="btn btn-sm"
-            title="Skopiuj liczby i trudność z serii #1 do pozostałych pustych"
-            style={{ flexShrink: 0 }}
-          >
-            Wypełnij jak #1
-          </button>
-        )}
+        <div className="row" style={{ gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+          {showCopyButton && (
+            <button
+              type="button"
+              onClick={onCopyFromFirst}
+              disabled={!firstFilled}
+              className="btn btn-sm"
+              title="Skopiuj liczby i trudność z serii #1 do pozostałych pustych"
+            >
+              Wypełnij jak #1
+            </button>
+          )}
+          {!isExtra && (
+            <button
+              type="button"
+              onClick={onSwap}
+              className="btn btn-sm"
+              title="Zaloguj inne ćwiczenie z biblioteki zamiast tego"
+            >
+              <Icons.Edit /> Wymień
+            </button>
+          )}
+          {entry.origin === "substitute" && (
+            <button
+              type="button"
+              onClick={onUndoSwap}
+              className="btn btn-sm btn-ghost"
+              title="Wróć do ćwiczenia z planu (wpisane serie znikną)"
+            >
+              Cofnij wymianę
+            </button>
+          )}
+          {isExtra && (
+            <button
+              type="button"
+              onClick={onRemoveEntry}
+              className="btn btn-sm btn-ghost"
+              title="Usuń to ćwiczenie z formularza"
+            >
+              <Icons.Trash /> Usuń
+            </button>
+          )}
+        </div>
       </div>
 
       <div style={{ padding: 12, display: "grid", gap: 10 }}>
         {sets.map((set, sIdx) =>
           set.skipped ? (
             <SkippedSetRow
-              // biome-ignore lint/suspicious/noArrayIndexKey: deterministic enumeration; rows never reorder.
+              // biome-ignore lint/suspicious/noArrayIndexKey: pozycja JEST tożsamością wiersza (jedzie jako `ordinal`), a zdjęcie wiersza przemontowuje całą kartę (`videoFieldsEpoch` w trasie), więc stan pola wideo nie przykleja się do cudzego indeksu.
               key={sIdx}
               sIdx={sIdx}
               onUnskip={() => onUnskipSet(sIdx)}
+              onRemove={sIdx >= lockedRows ? () => onRemoveSet(sIdx) : undefined}
             />
           ) : (
             <SetRow
-              // biome-ignore lint/suspicious/noArrayIndexKey: deterministic enumeration; rows never reorder.
+              // biome-ignore lint/suspicious/noArrayIndexKey: jak wyżej — pozycja jest tożsamością wiersza, a zdjęcie wiersza przemontowuje kartę.
               key={sIdx}
               eIdx={eIdx}
               sIdx={sIdx}
@@ -111,10 +195,26 @@ export function LogExerciseCard({
               maxVideoBytes={maxVideoBytes}
               onChange={(patch) => onUpdateSet(sIdx, patch)}
               onSkip={() => onSkipSet(sIdx)}
+              onRemove={sIdx >= lockedRows ? () => onRemoveSet(sIdx) : undefined}
               onVideoStateChange={(state) => onVideoStateChange(sIdx, state)}
             />
           ),
         )}
+        <div>
+          <button
+            type="button"
+            onClick={onAddSet}
+            disabled={atSetCeiling}
+            className="btn btn-sm btn-ghost"
+            title={
+              atSetCeiling
+                ? `Więcej niż ${MAX_SETS_PER_ENTRY} serii na ćwiczenie nie da się zapisać.`
+                : "Dołóż serię ponad plan"
+            }
+          >
+            <Icons.Plus /> Dodaj serię
+          </button>
+        </div>
       </div>
     </div>
   );
@@ -136,26 +236,31 @@ function SetRow({
   maxVideoBytes,
   onChange,
   onSkip,
+  onRemove,
   onVideoStateChange,
 }: {
   eIdx: number;
   sIdx: number;
   unit: "REPS" | "SEC";
-  expectedReps: number;
+  /** `null` dla wpisu spoza planu — nie ma celu, z którego dałoby się podpowiedzieć. */
+  expectedReps: number | null;
   tracksRpe: boolean;
   set: SetState;
   maxVideoBytes: number;
   onChange: (patch: Partial<SetState>) => void;
   onSkip: () => void;
+  /** Podane wyłącznie dla wiersza PONAD plan — brak znaczy „nie do zdjęcia". */
+  onRemove?: () => void;
   onVideoStateChange: (state: VideoUploadState) => void;
 }) {
   const diffName = `e_${eIdx}_s_${sIdx}_diff`;
 
   // Picking a difficulty implies "I did this set" — backfill reps with the
   // target so the trainee doesn't have to type a number they hit on plan.
-  // They can still override afterwards.
+  // They can still override afterwards. Wpis spoza planu celu nie ma, więc nie
+  // ma czym uzupełniać — zostaje sama trudność.
   const onDifficultyChange = (v: string) => {
-    if (!set.reps.trim()) {
+    if (!set.reps.trim() && expectedReps != null) {
       onChange({ difficulty: v, reps: String(expectedReps) });
     } else {
       onChange({ difficulty: v });
@@ -175,20 +280,34 @@ function SetRow({
     >
       <div className="row between" style={{ alignItems: "center", marginBottom: -2 }}>
         <span className="mono text-xs muted">Seria #{sIdx + 1}</span>
-        <button
-          type="button"
-          onClick={onSkip}
-          className="btn btn-sm btn-ghost"
-          style={{
-            fontSize: 11,
-            color: "var(--muted)",
-            padding: "2px 8px",
-            height: 24,
-          }}
-          title="Oznacz tę serię jako pominiętą (nie wlicza się do statystyk)"
-        >
-          <Icons.X style={{ fontSize: 11 }} /> Pomiń
-        </button>
+        <div className="row" style={{ gap: 4, alignItems: "center" }}>
+          <button
+            type="button"
+            onClick={onSkip}
+            className="btn btn-sm btn-ghost"
+            style={{
+              fontSize: 11,
+              color: "var(--muted)",
+              padding: "2px 8px",
+              height: 24,
+            }}
+            title="Oznacz tę serię jako pominiętą (nie wlicza się do statystyk)"
+          >
+            <Icons.X style={{ fontSize: 11 }} /> Pomiń
+          </button>
+          {onRemove != null && (
+            <button
+              type="button"
+              onClick={onRemove}
+              className="btn btn-sm btn-ghost"
+              style={{ fontSize: 11, color: "var(--muted)", padding: "2px 8px", height: 24 }}
+              title="Zdejmij ten wiersz (seria ponad plan)"
+              aria-label={`Zdejmij serię #${sIdx + 1}`}
+            >
+              –
+            </button>
+          )}
+        </div>
       </div>
       <div
         className="row"
@@ -213,7 +332,7 @@ function SetRow({
             max={1000}
             inputMode="numeric"
             value={set.reps}
-            placeholder={String(expectedReps)}
+            placeholder={expectedReps != null ? String(expectedReps) : "—"}
             onChange={(e) => onChange({ reps: e.target.value })}
             className="input input-num"
           />
@@ -267,9 +386,12 @@ function SetRow({
 function SkippedSetRow({
   sIdx,
   onUnskip,
+  onRemove,
 }: {
   sIdx: number;
   onUnskip: () => void;
+  /** Jak w `SetRow` — tylko wiersz ponad plan da się zdjąć. */
+  onRemove?: () => void;
 }) {
   return (
     <div
@@ -302,14 +424,28 @@ function SkippedSetRow({
           nie wlicza się do statystyk
         </span>
       </div>
-      <button
-        type="button"
-        onClick={onUnskip}
-        className="btn btn-sm btn-ghost"
-        style={{ fontSize: 11, padding: "2px 8px", height: 24 }}
-      >
-        Cofnij
-      </button>
+      <div className="row" style={{ gap: 4, alignItems: "center" }}>
+        <button
+          type="button"
+          onClick={onUnskip}
+          className="btn btn-sm btn-ghost"
+          style={{ fontSize: 11, padding: "2px 8px", height: 24 }}
+        >
+          Cofnij
+        </button>
+        {onRemove != null && (
+          <button
+            type="button"
+            onClick={onRemove}
+            className="btn btn-sm btn-ghost"
+            style={{ fontSize: 11, padding: "2px 8px", height: 24 }}
+            title="Zdejmij ten wiersz (seria ponad plan)"
+            aria-label={`Zdejmij serię #${sIdx + 1}`}
+          >
+            –
+          </button>
+        )}
+      </div>
     </div>
   );
 }
