@@ -16,9 +16,9 @@ import { Modal } from "./modal";
  * **Granica testu:** niżej jest test WYŁĄCZNIE dla `filterExercises` —
  * czystej funkcji wydzielonej z komponentu. `@testing-library/react` nie
  * jest dziś zależnością tego drzewa, więc sam modal (otwarcie, wybór klikiem,
- * Esc, komunikat pustej biblioteki) nie ma tu testu renderującego — pokrywa
- * go scenariusz Playwrighta z Zadania 10. Brak tego testu TUTAJ jest granicą
- * zakresu, nie przeoczeniem.
+ * Esc, komunikat pustej biblioteki, wybór między `excludedNote` a „Nic nie
+ * pasuje…") nie ma tu testu renderującego — pokrywa go scenariusz Playwrighta
+ * z Zadania 10. Brak tego testu TUTAJ jest granicą zakresu, nie przeoczeniem.
  */
 export interface ExercisePickerProps {
   open: boolean;
@@ -32,9 +32,23 @@ export interface ExercisePickerProps {
    * odmówiłby `SUBSTITUTION_MISPLACED`).
    */
   excludeIds?: string[];
+  /**
+   * Zdanie pokazywane zamiast „Nic nie pasuje do…", gdy szukajka COŚ znalazła,
+   * ale wszystko wypadło przez `excludeIds`. Bez tego odsiew wygląda jak awaria
+   * biblioteki: użytkownik wpisuje nazwę ćwiczenia, o którym wie, że trener je
+   * ma, i dostaje komunikat sugerujący, że go nie ma.
+   */
+  excludedNote?: string;
 }
 
-export function ExercisePicker({ open, onClose, onPick, title, excludeIds }: ExercisePickerProps) {
+export function ExercisePicker({
+  open,
+  onClose,
+  onPick,
+  title,
+  excludeIds,
+  excludedNote,
+}: ExercisePickerProps) {
   const fetcher = useFetcher<{ exercises: PickableExercise[] }>();
   const [q, setQ] = useState("");
 
@@ -57,6 +71,9 @@ export function ExercisePicker({ open, onClose, onPick, title, excludeIds }: Exe
   const loading = fetcher.data === undefined;
   const library = fetcher.data?.exercises ?? [];
   const visible = filterExercises(library, q, excludeIds);
+  // Ile ćwiczeń pasowało do szukajki, ale wypadło przez odsiew — rozróżnia
+  // „biblioteka tego nie ma" od „tego akurat nie wolno tu wybrać".
+  const odsiane = filterExercises(library, q).length - visible.length;
 
   return (
     <Modal open={open} onClose={onClose} title={title}>
@@ -84,7 +101,11 @@ export function ExercisePicker({ open, onClose, onPick, title, excludeIds }: Exe
             </div>
             {visible.length === 0 ? (
               <div className="text-sm muted">
-                {q.trim() === "" ? "Brak innych ćwiczeń do wyboru." : `Nic nie pasuje do „${q}".`}
+                {odsiane > 0 && excludedNote != null
+                  ? excludedNote
+                  : q.trim() === ""
+                    ? "Brak innych ćwiczeń do wyboru."
+                    : `Nic nie pasuje do „${q}".`}
               </div>
             ) : (
               <div className="col" style={{ gap: 10, maxHeight: 360, overflowY: "auto" }}>

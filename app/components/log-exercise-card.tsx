@@ -97,17 +97,27 @@ export function LogExerciseCard({
             {isExtra && <span className="badge">spoza planu</span>}
           </div>
           <div style={{ fontSize: 15, fontWeight: 600, marginTop: 2 }}>{entry.exerciseName}</div>
-          {entry.plannedSets != null && entry.expectedReps != null ? (
+          {/* Dwa warunki, nie jeden: zamiennik ZACHOWUJE liczbę serii z planu, ale
+              traci cel powtórzeń (patrz `rehydrateEntries` i `swapEntry` — cel po
+              starym ćwiczeniu wpisywałby się w pole przy kliknięciu trudności).
+              Sklejone w jeden warunek dawałyby przy zamienniku „Bez celu z planu",
+              co jest nieprawdą: liczba serii nadal obowiązuje. */}
+          {entry.plannedSets != null ? (
             <div className="text-xs muted" style={{ marginTop: 3 }}>
               Cel:{" "}
               <strong className="mono" style={{ color: "var(--ink)" }}>
                 {entry.plannedSets}
               </strong>{" "}
-              seria(e) ×{" "}
-              <strong className="mono" style={{ color: "var(--ink)" }}>
-                {entry.expectedReps}
-              </strong>{" "}
-              {entry.unit === "SEC" ? "sek." : "powt."}
+              seria(e)
+              {entry.expectedReps != null && (
+                <>
+                  {" × "}
+                  <strong className="mono" style={{ color: "var(--ink)" }}>
+                    {entry.expectedReps}
+                  </strong>{" "}
+                  {entry.unit === "SEC" ? "sek." : "powt."}
+                </>
+              )}
             </div>
           ) : (
             <div className="text-xs muted" style={{ marginTop: 3 }}>
