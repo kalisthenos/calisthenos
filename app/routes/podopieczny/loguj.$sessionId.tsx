@@ -22,10 +22,13 @@ import { maxUploadBytesFor } from "~/lib/file-uploads";
 import { type PlForms, pluralizePl, todayISO } from "~/lib/format";
 import {
   type DraftEntry,
+  type EntryDescriptor,
   type SetDraft,
+  descriptorOf,
   draftHasContent,
   draftKey,
   parseDraft,
+  rehydrateEntries,
   serializeDraft,
 } from "~/lib/log-draft";
 import {
@@ -64,8 +67,13 @@ const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
  * mogą go zepsuć" — nie ma jak odróżnić wiersza planowanego od dołożonego.
  * `allDone` i tak jest flagą deklarowaną przez klienta (`LogWorkoutDto`), więc
  * podrobienie go nie otwiera niczego, czego nie dałoby się zrobić wprost.
+ *
+ * Adnotacja `z.ZodType<EntryDescriptor>` jest bramką, nie ozdobą: kształt jest
+ * własnością `log-draft.ts` (razem z `descriptorOf`, które go produkuje), a tu
+ * stoi już tylko jego WALIDACJA. Rozjazd między jednym a drugim czerwieni się
+ * na `tsc`, zamiast objawić się polem, którego akcja nie odczyta.
  */
-const DescriptorSchema = z.object({
+const DescriptorSchema: z.ZodType<EntryDescriptor> = z.object({
   exerciseId: z.string().min(1),
   exerciseName: z.string(),
   unit: z.enum(["REPS", "SEC"]),
@@ -86,8 +94,6 @@ const DescriptorSchema = z.object({
  * przepuszczamy tutaj, żeby nikt nie wziął tej liczby za regułę produktu.
  */
 const DescriptorsSchema = z.array(DescriptorSchema).max(200);
-
-type Descriptor = z.infer<typeof DescriptorSchema>;
 
 export async function loader(args: LoaderFunctionArgs) {
   const { api, user } = requireUser(args.context, { role: "trainee" });
@@ -146,7 +152,7 @@ export async function action(args: ActionFunctionArgs) {
   if (!descriptorsParse.success) {
     return { error: "Nie udało się odczytać listy ćwiczeń. Odśwież stronę i spróbuj ponownie." };
   }
-  const descriptors: Descriptor[] = descriptorsParse.data;
+  const descriptors: EntryDescriptor[] = descriptorsParse.data;
 
   try {
     const logged: DraftEntry[] = [];
@@ -241,6 +247,34 @@ export async function action(args: ActionFunctionArgs) {
       return { error: "Zapisz co najmniej jedną serię." };
     }
 
+    // N14 sprawdzany TUTAJ, choć rozstrzyga go backend — i to nie jest
+    // odtwarzanie cudzej reguły na zapas. Plan wolno ułożyć tak, że to samo
+    // ćwiczenie stoi w dwóch blokach (`plan-tree.ts` nie ma reguły unikalności),
+    // a wtedy wymiana JEDNEGO wystąpienia przy zalogowanym drugim daje odmowę,
+    // której komunikat z BE **nie nazywa ćwiczenia** — identyfikator siedzi
+    // w `details`, których formularz nie pokazuje. Podopieczny dostaje więc
+    // zdanie bez nazwy przy dwóch kartach o tej samej nazwie i nie ma jak
+    // zapisać sesji: klika ponownie i dostaje to samo. Tu zamieniamy odmowę
+    // nie do naprawienia w zdanie mówiące, CO KLIKNĄĆ.
+    //
+    // Blokady w chwili WYMIANY świadomie nie ma: konflikt powstaje dopiero, gdy
+    // drugie wystąpienie naprawdę dostanie serię, a zabieranie „Wymień" za
+    // przewinę jeszcze niepopełnioną jest karą bez winy.
+    const zalogowaneZPlanu = new Set(
+      exercisesPayload.filter((e) => e.origin === "planned").map((e) => e.exerciseId),
+    );
+    const konflikt = exercisesPayload.find(
+      (e) => e.substitutedExerciseId != null && zalogowaneZPlanu.has(e.substitutedExerciseId),
+    );
+    if (konflikt != null) {
+      const nazwa = logged.find(
+        (e) => e.origin === "planned" && e.exerciseId === konflikt.substitutedExerciseId,
+      )?.exerciseName;
+      return {
+        error: `Ćwiczenie ${nazwa ?? "z planu"} wymieniłeś w jednym miejscu planu, a w innym je zalogowałeś — cofnij wymianę albo nie loguj drugiego wystąpienia.`,
+      };
+    }
+
     const saved = await saveWorkoutLog(
       api,
       {
@@ -292,71 +326,6 @@ const blankSet = (): SetState => ({
 });
 
 const blankSets = (count: number): SetState[] => Array.from({ length: count }, blankSet);
-
-/** Kształt, który jedzie w ukrytym polu `entries` — patrz `DescriptorSchema`. */
-function descriptorOf(entry: LogEntry): Descriptor {
-  return {
-    exerciseId: entry.exerciseId,
-    exerciseName: entry.exerciseName,
-    unit: entry.unit,
-    tracksRpe: entry.tracksRpe,
-    origin: entry.origin,
-    substitutedExerciseId: entry.substitutedExerciseId,
-    plannedSets: entry.plannedSets,
-    setCount: entry.sets.length,
-  };
-}
-
-/**
- * Szkic wozi `DraftEntry` — wszystko, co trzeba ZAPISAĆ — ale nie wozi pól,
- * które służą wyłącznie do NARYSOWANIA karty (`plannedSets`, `expectedReps`,
- * `note`, `isDropsetItem`, nazwa zastąpionego). Te wracają z planu.
- *
- * Dopasowanie idzie KURSOREM po wpisach planu, nie po indeksie tablicy szkicu:
- * wpisy `extra` doklejają się na końcu i nie mają odpowiednika w planie, a wpis
- * `planned`/`substitute` stoi dokładnie tam, gdzie stała pozycja planu (wymiana
- * podmienia W MIEJSCU). Szkic o kształcie, którego nasze operacje nigdy nie
- * wytwarzają, degraduje się do wpisu `extra` bez wskaźnika zamiany — czyli do
- * czegoś, czego backend na pewno nie odrzuci jako źle postawionej zamiany.
- */
-function rehydrateEntries(planEntries: LogEntry[], draft: DraftEntry[]): LogEntry[] {
-  let cursor = 0;
-  return draft.map((d, i) => {
-    const base = d.origin === "extra" ? undefined : planEntries[cursor++];
-    if (base == null) {
-      return {
-        key: `extra:r${i}`,
-        exerciseId: d.exerciseId,
-        exerciseName: d.exerciseName,
-        unit: d.unit,
-        tracksRpe: d.tracksRpe,
-        origin: "extra" as const,
-        substitutedExerciseId: null,
-        substitutedExerciseName: null,
-        plannedSets: null,
-        expectedReps: null,
-        note: null,
-        isDropsetItem: false,
-        sets: d.sets,
-      };
-    }
-    return {
-      key: base.key,
-      exerciseId: d.exerciseId,
-      exerciseName: d.exerciseName,
-      unit: d.unit,
-      tracksRpe: d.tracksRpe,
-      origin: d.origin,
-      substitutedExerciseId: d.substitutedExerciseId,
-      substitutedExerciseName: d.origin === "substitute" ? base.exerciseName : null,
-      plannedSets: base.plannedSets,
-      expectedReps: base.expectedReps,
-      note: base.note,
-      isDropsetItem: base.isDropsetItem,
-      sets: d.sets,
-    };
-  });
-}
 
 type PickerState = { mode: "swap"; key: string } | { mode: "extra" };
 
@@ -410,13 +379,24 @@ export default function LogForm() {
 
   const [restoredDraft, setRestoredDraft] = useState(false);
   const [draftReady, setDraftReady] = useState(false);
-  // Licznik przemontowań kart ćwiczeń. `VideoUploadField` trzyma stan wysyłki u siebie
+  // Liczniki przemontowań kart. `VideoUploadField` trzyma stan wysyłki u siebie
   // i czyta `initialFileId` tylko raz, więc każde ZEWNĘTRZNE nadpisanie serii
-  // (przywrócenie szkicu, wyczyszczenie go, wymiana ćwiczenia, zdjęcie wiersza)
   // musi go przemontować. Pola tekstowe są kontrolowane przez `entries`, więc
-  // remount karty niczego nie gubi.
+  // remount niczego nie gubi — ale remount PRZERYWA trwającą wysyłkę, i to po
+  // cichu: `abort()` idzie ścieżką `ABORTED`, która celowo milczy, bo zakłada,
+  // że anulował użytkownik.
+  //
+  // Dlatego liczniki są DWA. Per wpis — dla „–" i „Wymień", czyli przycisków,
+  // których cały sens polega na klikaniu W TRAKCIE treningu: zdjęcie wiersza
+  // w ćwiczeniu 4 nie ma prawa zabić nagrania lecącego w ćwiczeniu 1. Globalny —
+  // wyłącznie dla szkicu (przywrócenie, wyczyszczenie), bo tam nadpisujemy
+  // WSZYSTKIE wpisy naraz, a dzieje się to przy montowaniu albo na wyraźne
+  // żądanie, nie w tle wysyłki.
   const [videoFieldsEpoch, setVideoFieldsEpoch] = useState(0);
-  const remountVideoFields = () => setVideoFieldsEpoch((n) => n + 1);
+  const [entryVideoEpochs, setEntryVideoEpochs] = useState<Record<string, number>>({});
+  const remountAllVideoFields = () => setVideoFieldsEpoch((n) => n + 1);
+  const remountEntryVideoFields = (key: string) =>
+    setEntryVideoEpochs((prev) => ({ ...prev, [key]: (prev[key] ?? 0) + 1 }));
 
   const patchEntry = (key: string, fn: (entry: LogEntry) => LogEntry) =>
     setEntries((prev) => prev.map((entry) => (entry.key === key ? fn(entry) : entry)));
@@ -488,7 +468,7 @@ export default function LogForm() {
       if (sIdx < (entry.plannedSets ?? 1)) return entry;
       return { ...entry, sets: entry.sets.filter((_, j) => j !== sIdx) };
     });
-    remountVideoFields();
+    remountEntryVideoFields(key);
   };
 
   /**
@@ -499,7 +479,14 @@ export default function LogForm() {
    *
    * Serie CZYŚCIMY, liczbę wierszy zostawiamy: zamiennik może mieć inną flagę
    * oceny trudności, więc wiersze wypełnione pod stare ćwiczenie byłyby
-   * niepoprawne — ale cel serii z planu nadal obowiązuje.
+   * niepoprawne — ale liczba serii z planu nadal obowiązuje.
+   *
+   * ZERUJEMY za to `expectedReps` i `note`, i to jest poprawka o wadze błędu,
+   * nie porządki: cel „× 8" pod „Podciąganie 3×8" jest WPISYWANY do pola
+   * powtórzeń, gdy podopieczny kliknie trudność (`log-exercise-card`), więc
+   * przy zamienniku „Plank" (jednostka SEC) wpisałby plank na osiem sekund —
+   * i nikt nie musi tego zauważyć. Notatka trenera dotyczyła ćwiczenia,
+   * którego już tu nie ma.
    *
    * Druga wymiana pod rząd NIE robi łańcucha: wskaźnik dalej pokazuje ćwiczenie
    * z PLANU, bo tylko takie przechodzi N13 („zastąpione stoi w tej sesji").
@@ -519,9 +506,11 @@ export default function LogForm() {
         entry.origin === "substitute" ? entry.substitutedExerciseId : entry.exerciseId,
       substitutedExerciseName:
         entry.origin === "substitute" ? entry.substitutedExerciseName : entry.exerciseName,
+      expectedReps: null,
+      note: null,
       sets: blankSets(entry.sets.length),
     }));
-    remountVideoFields();
+    remountEntryVideoFields(key);
   };
 
   /** Przywraca wpis z planu po tym samym kluczu — z planową liczbą pustych wierszy. */
@@ -529,7 +518,7 @@ export default function LogForm() {
     const base = planEntries.find((p) => p.key === key);
     if (!base) return;
     patchEntry(key, () => ({ ...base, sets: blankSets(base.plannedSets ?? 1) }));
-    remountVideoFields();
+    remountEntryVideoFields(key);
   };
 
   /** Ćwiczenie spoza planu — na KOŃCU listy, bez celu, z jednym pustym wierszem. */
@@ -602,7 +591,8 @@ export default function LogForm() {
         setRestoredDraft(true);
         // Pola wideo czytają `initialFileId` tylko przy montowaniu, a tu jesteśmy już
         // po hydracji — bez przemontowania przywrócone nagrania by się nie pokazały.
-        remountVideoFields();
+        // Wysyłki w tle być tu nie może: to pierwszy render po zamontowaniu.
+        remountAllVideoFields();
       }
     } catch {
       // sessionStorage niedostępny (tryb prywatny itd.) — pomijamy przywracanie.
@@ -631,7 +621,7 @@ export default function LogForm() {
   const clearDraft = () => {
     setEntries(planEntries.map((e) => ({ ...e, sets: blankSets(e.plannedSets ?? 1) })));
     setRestoredDraft(false);
-    remountVideoFields();
+    remountAllVideoFields();
     try {
       sessionStorage.removeItem(draftKey(session.id));
     } catch {
@@ -647,12 +637,21 @@ export default function LogForm() {
   // ma się o tym dowiadywać z błędu po zapisie. Odsiewamy więc i ćwiczenie
   // widoczne teraz, i to z planu, które ten wpis już raz zastąpił.
   //
-  // Dla dodatku spoza planu odsiewamy wszystko, co już jest w formularzu — druga
-  // karta tego samego ćwiczenia niczego nie wnosi, bo dodatkowe serie dokłada się
-  // przyciskiem „Dodaj serię" w karcie, która już stoi.
+  // Dla dodatku spoza planu odsiewamy dwie rzeczy. Po pierwsze wszystko, co już
+  // jest w formularzu — druga karta tego samego ćwiczenia niczego nie wnosi, bo
+  // dodatkowe serie dokłada się przyciskiem „Dodaj serię" w karcie, która już
+  // stoi. Po drugie ćwiczenia WŁAŚNIE ZASTĄPIONE, których po wymianie w miejscu
+  // w `entries` już nie ma: „Australian pull-up zamiast Podciąganie" obok
+  // „Podciąganie poza planem" to „zamiast" i „oraz" naraz, czyli dokładnie to,
+  // czego zabrania reguła — a AKURAT TEJ kombinacji backend nie łapie, bo N14
+  // patrzy wyłącznie na wpisy `origin === "planned"`.
   const pickerExcludeIds = useMemo(() => {
     if (picker == null) return [];
-    if (picker.mode === "extra") return entries.map((e) => e.exerciseId);
+    if (picker.mode === "extra") {
+      return entries.flatMap((e) =>
+        e.substitutedExerciseId == null ? [e.exerciseId] : [e.exerciseId, e.substitutedExerciseId],
+      );
+    }
     if (swapTarget == null) return [];
     return swapTarget.substitutedExerciseId == null
       ? [swapTarget.exerciseId]
@@ -754,7 +753,7 @@ export default function LogForm() {
         ) : (
           entries.map((entry, eIdx) => (
             <LogExerciseCard
-              key={`${entry.key}-${videoFieldsEpoch}`}
+              key={`${entry.key}-${videoFieldsEpoch}-${entryVideoEpochs[entry.key] ?? 0}`}
               entry={entry}
               eIdx={eIdx}
               totalEntries={entries.length}
@@ -843,6 +842,11 @@ export default function LogForm() {
             : "Ćwiczenie spoza planu"
         }
         excludeIds={pickerExcludeIds}
+        excludedNote={
+          picker?.mode === "swap"
+            ? "To ćwiczenie już tu stoi albo właśnie je zastępujesz — wybierz inne."
+            : "To ćwiczenie jest już w tym formularzu albo właśnie je zastąpiłeś. Dodatkowe serie dokładasz przyciskiem „Dodaj serię” w jego karcie."
+        }
       />
 
       <div className="text-xs muted" style={{ marginTop: 18 }}>
