@@ -19,6 +19,47 @@ Mapa URL → plik: `app/routes/README.md`.
 | widoki trenera (`/trener/*`) | `app/routes/trener/` |
 | widoki podopiecznego (`/podopieczny/*`) | `app/routes/podopieczny/` |
 
+## Trasa ZASOBOWA — sam loader, bez komponentu
+
+Trasa istnieje też po to, żeby karmić `useFetcher` danymi, których nie warto ładować przy
+każdym wejściu na ekran. Wtedy plik ma **wyłącznie `loader`**, bez domyślnego eksportu:
+`upload.wideo.tsx`, `biblioteka-cwiczen.tsx`.
+
+**Nadal są to DWA miejsca** — bez wpisu w `app/routes.ts` `useFetcher` dostaje `404` dopiero
+w przeglądarce. Nadal obowiązuje zakaz wołania klienta. Zmieniają się dwie rzeczy:
+
+**Stoi POZA blokiem `prefix(...)`**, jeśli nie należy do layoutu — tak jak `upload/wideo`
+i `biblioteka-cwiczen`. Wciągnięcie jej pod `prefix("podopieczny")` dołożyłoby jej layout,
+którego nikt nie renderuje.
+
+**NIE RZUCA — oddaje błąd danymi.** To jest reguła kupiona przeglądem gałęzi
+`feat/sesja-poza-planem` (2026-09-08) i najważniejsze zdanie tej sekcji. `useFetcher` rejestruje
+się pod trasą, która go **renderuje**, nie pod tą, którą woła — więc wyjątek z trasy zasobowej
+ląduje w `ErrorBoundary` **ekranu wołającego** i zmiata go w całości. Zmierzony objaw:
+`biblioteka-cwiczen.tsx` rzucała przy zerwanej sieci, a podopieczny z wypełnionym formularzem
+treningu klikał „Wymień" i dostawał ekran **„Nie udało się zapisać treningu"** — komunikat
+o zapisie, którego nie było, zamiast formularza, nad którym pracował.
+
+Oddawaj więc kształt z miejscem na błąd (`{ dane, error }`), przepuszczając dalej **wyłącznie
+`Response`** — bo przekierowanie po martwej sesji ma nadal działać:
+
+```ts
+try {
+  return { exercises: await listActiveExercisesForTrainee(api), error: null };
+} catch (err) {
+  if (err instanceof Response) throw err;
+  logger.error("…", errorMeta(err));
+  return { exercises: [], error: "Nie udało się wczytać biblioteki ćwiczeń." };
+}
+```
+
+Konsument musi mieć wtedy stan błędu. Uwaga na pułapkę: `loading` liczone jako
+`fetcher.data === undefined` czyni awarię **nieodróżnialną od wczytywania** — dołóż znacznik
+„już prosiłem".
+
+**Test tej trasy asercjuje, że błąd wraca DANYMI, nie wyjątkiem.** `rejects.toThrow()` jest tu
+zieloną bramką pod utratą treningu.
+
 ## Loader czyta, akcja mutuje
 
 Nie ma osobnego API po tej stronie — dane lecą loaderami i akcjami. Mutacje plikowe to
