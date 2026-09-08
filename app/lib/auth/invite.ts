@@ -32,12 +32,6 @@ export class InviteError extends Error {
 export interface CreateInviteInput {
   displayName: string;
   email: string | null;
-  /**
-   * Kwota ustaleń w groszach, zapisywana przez BE przy dołączeniu podopiecznego
-   * (zdarzenie `TraineeJoined`); `null` = zaproszenie bez kwoty. Nie jest
-   * płatnością — po S6 nic w FE nie pobiera pieniędzy (D1 specu).
-   */
-  monthlyAmountGrosze: number | null;
   /** Szablon formularza startowego; `null` = zaproszenie bez formularza. */
   onboardingForm: { exerciseIds: string[]; note: string | null } | null;
 }
@@ -69,7 +63,6 @@ export async function createInvite(
       body: {
         displayName: input.displayName,
         email: input.email,
-        monthlyAmountGrosze: input.monthlyAmountGrosze,
         onboardingForm:
           input.onboardingForm == null
             ? null

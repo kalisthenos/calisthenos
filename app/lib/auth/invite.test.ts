@@ -50,7 +50,6 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     await createInvite(api, {
       displayName: "Nowy Podopieczny",
       email: "nowy@example.com",
-      monthlyAmountGrosze: 20000,
       onboardingForm: { exerciseIds: ["e-1", "e-2"], note: "Wykonaj na świeżo." },
     });
 
@@ -59,7 +58,6 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     expect(cialo).toEqual({
       displayName: "Nowy Podopieczny",
       email: "nowy@example.com",
-      monthlyAmountGrosze: 20000,
       onboardingForm: { exerciseIds: ["e-1", "e-2"], note: "Wykonaj na świeżo." },
     });
   });
@@ -76,14 +74,12 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     await createInvite(api, {
       displayName: "Nowy Podopieczny",
       email: "nowy@example.com",
-      monthlyAmountGrosze: null,
       onboardingForm: null,
     });
 
     expect(cialo).toEqual({
       displayName: "Nowy Podopieczny",
       email: "nowy@example.com",
-      monthlyAmountGrosze: null,
       onboardingForm: null,
     });
   });
@@ -97,7 +93,6 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     const wynik = await createInvite(api, {
       displayName: "Nowy Podopieczny",
       email: null,
-      monthlyAmountGrosze: null,
       onboardingForm: null,
     });
 
@@ -123,7 +118,6 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     const wejscie = {
       displayName: "Nowy Podopieczny",
       email: "nowy@example.com",
-      monthlyAmountGrosze: null,
       onboardingForm: { exerciseIds: ["e-x"], note: null },
     };
 
@@ -142,7 +136,6 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     const blad = await createInvite(api, {
       displayName: "Nowy Podopieczny",
       email: null,
-      monthlyAmountGrosze: null,
       onboardingForm: null,
     }).catch((e) => e);
 

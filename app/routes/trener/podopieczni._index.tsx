@@ -19,7 +19,6 @@ import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { InviteError, createInvite } from "~/lib/auth";
 import { getEnv } from "~/lib/env";
 import { listActiveExercisesForTrainer } from "~/lib/exercises";
-import { parsePlnToGrosze, MonthlyAmountSchema } from "~/lib/money";
 import { daysAgo, pluralizePl, type PlForms } from "~/lib/format";
 import { parseListControls, type ListControlsSpec } from "~/lib/list-params";
 import { OnboardingTemplateSchema } from "~/lib/onboarding-form-types";
@@ -109,17 +108,6 @@ export async function action(args: ActionFunctionArgs) {
     return { error: parsed.error.issues[0]?.message ?? "Sprawdź formularz." };
   }
 
-  const amountRaw = String(fd.get("monthlyAmount") ?? "").trim();
-  let monthlyAmountGrosze: number | null = null;
-  if (amountRaw !== "") {
-    const g = parsePlnToGrosze(amountRaw);
-    const parsedAmt = g === null ? null : MonthlyAmountSchema.safeParse(g);
-    if (!parsedAmt || !parsedAmt.success) {
-      return { error: "Kwota miesięczna jest nieprawidłowa (min. 2 zł)." };
-    }
-    monthlyAmountGrosze = parsedAmt.data;
-  }
-
   const wantsForm = fd.get("withOnboarding") === "on";
   let template: { exerciseIds: string[]; note: string | null } | null = null;
   if (wantsForm) {
@@ -140,7 +128,6 @@ export async function action(args: ActionFunctionArgs) {
     ({ token } = await createInvite(api, {
       displayName: parsed.data.displayName,
       email: parsed.data.email,
-      monthlyAmountGrosze,
       onboardingForm: template,
     }));
   } catch (e) {
@@ -251,21 +238,6 @@ export default function TrenerPodopieczniList() {
                 placeholder="mateusz@example.pl"
                 className="input"
               />
-            </div>
-            <div className="field">
-              <label htmlFor="inv-amount">Kwota miesięczna (zł) — opcjonalnie</label>
-              <input
-                id="inv-amount"
-                name="monthlyAmount"
-                type="text"
-                inputMode="decimal"
-                placeholder="np. 200"
-                className="input"
-              />
-              <p className="text-xs muted" style={{ margin: "4px 0 0" }}>
-                Zapis ustalonej kwoty — trafia do BE razem z zaproszeniem. Rozliczenie prowadzisz
-                poza aplikacją; zostaw puste, jeśli nie chcesz jej zapisywać.
-              </p>
             </div>
             <OnboardingPicker exercises={exercises} />
             {actionData != null && "error" in actionData && actionData.error != null && (
