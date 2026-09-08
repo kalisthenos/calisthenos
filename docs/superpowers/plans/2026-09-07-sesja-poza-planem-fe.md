@@ -19,10 +19,14 @@ Playwright, npm. Dane wyłącznie przez `@kalisthenos/api-client`.
 
 **Spec:** `calisthenos-be/docs/superpowers/specs/2026-09-07-sesja-poza-planem-design.md` §13
 
-**Poprzednik:** `calisthenos-be/docs/superpowers/plans/2026-09-07-sesja-poza-planem-be.md`.
-**Ten plan nie zaczyna się, dopóki tamten nie jest domknięty** — stoi na `origin` w kontrakcie
-i na trasie `GET /v1/me/exercises`. Załóż gałąź roboczą (`feat/sesja-poza-planem`), nie pracuj
-na `main`; to drzewo idzie przez PR-y.
+**Poprzednik:** `calisthenos-be/docs/superpowers/plans/2026-09-07-sesja-poza-planem-be.md` —
+**domknięty 2026-09-07**, trzynaście zadań, gałąź `feat/sesja-poza-planem`, `c2f5da0..0af0ec1`.
+Ten plan stoi na `origin` w kontrakcie i na trasie `GET /v1/me/exercises`, więc **zaczyna się
+dopiero po wydaniu pakietu klienta** — patrz Zadanie 1.
+
+**Gałąź:** `feat/sesja-poza-planem` **już istnieje w tym drzewie i jest wybrana** — nie zakładaj
+jej ponownie. Gałąź główna tego drzewa nazywa się **`master`**, nie `main` (sprawdzone
+2026-09-08); to drzewo idzie przez PR-y.
 
 ## Global Constraints
 
@@ -32,7 +36,16 @@ na `main`; to drzewo idzie przez PR-y.
   błędów o zakończeniach linii i Twój diff w nich ginie (D-FE-1). Sprawdzaj **zmienione pliki**.
 - **`npm run lint` NIE wystarcza** — to sam linter, formatowania nie dotyka.
 - **Testy: `npx vitest run <wzorzec>`, nigdy `npm test`** (to tryb obserwowania i nigdy nie wraca).
-- **`npm install` i Docker prowadzi właściciel.** Testy e2e **piszesz, nie uruchamiasz**.
+- **`npm install` i Docker prowadzi Właściciel.** Testy e2e **piszesz, nie uruchamiasz**.
+- **Git prowadzi agent** — od 2026-09-07, tą samą konwencją co w BE (`calisthenos-fe/CLAUDE.md`,
+  „Granica, której nie przekraczasz"). **Pięć procedur tego drzewa mówi dziś inaczej** — mają
+  w sekcji „Domknięcie" nieaktualne zdanie o gicie. Poprawia to **Zadanie 0** i dlatego stoi
+  pierwsze; do czasu jego domknięcia obowiązuje `CLAUDE.md`, nie skill.
+- **Przeczytaj procedurę swojego zadania PRZED pierwszą linią kodu.** Gdy sesja stoi
+  w `calisthenos-fe`, wołasz ją nazwą (`calisthenos-fe:route`). Gdy stoi w **korzeniu**,
+  narzędzie `Skill` procedur drzew **nie widzi** — wtedy czytasz plik wprost:
+  `calisthenos-fe/.claude/skills/<nazwa>/SKILL.md`. Liczy się treść, nie mechanizm; pliki mają
+  po 50–70 wierszy.
 - **`npm run build` jest bramką, nie formalnością** — i w tym planie ma znaczenie szczególne.
   Osierocony import modułu serwerowego przechodzi `tsc` **bez słowa** i wywala się dopiero na
   buildzie. **Zadanie 7 przenosi trzysta linii między plikami**, czyli jest to dokładnie ten
@@ -78,8 +91,100 @@ niepoprawne. Liczba wierszy zostaje — cel serii z planu nadal obowiązuje.
 | `app/routes/podopieczny/loguj.$sessionId.tsx` | dynamiczne wiersze, wymiana, dodatek — **modyfikacja** | 8 |
 | `app/routes/podopieczny/historia.$logId.tsx` | oznaczenie pochodzenia — **modyfikacja** | 9 |
 | `app/routes/trener/podopieczni.$traineeId.log.$logId.tsx` | to samo u trenera — **modyfikacja** | 9 |
-| `tests/e2e/` (Playwright) | ścieżka wymiany i dodatku — **nowy** | 10 |
-| `app/lib/README.md`, `app/components/README.md`, `app/routes/README.md` | driver i pliki — **modyfikacja** | 11 |
+| `tests/e2e/sesja-poza-planem.spec.ts` | ścieżka wymiany i dodatku — **nowy** | 10 |
+| `app/lib/README.md`, `app/components/README.md`, `app/routes/README.md`, `tests/README.md` | mapy katalogów — **modyfikacja** | 11 |
+| `.claude/skills/{lib-module,list,route,component,e2e-test}/SKILL.md` | domknięcie zgodne z polityką gita — **modyfikacja** | 0 |
+
+## Rejestr nowych bytów
+
+**Żadne zadanie tego planu nie buduje konstruktu, którego katalog procedur nie zna.** Pięć
+procedur drzewa FE plus `contract-change` z korzenia pokrywają komplet: moduł `app/lib`, trasa,
+trasa zasobowa, komponent, test Playwrighta, druga połowa zmiany kontraktu. Nie zakłada się więc
+żadnej nowej procedury — a to jest twierdzenie, nie przeoczenie.
+
+Dwie kandydatury rozważono i **odrzucono świadomie**:
+
+| Kandydat | Dlaczego nie osobna procedura |
+| --- | --- |
+| **Trasa zasobowa** (sam `loader`, bez komponentu) | to przypadek szczególny `calisthenos-fe:route`, nie inny konstrukt: te same dwa miejsca (plik + `app/routes.ts`), ten sam zakaz importu klienta. Drugie wystąpienie w drzewie (po `upload.wideo.tsx`) — **brakujący akapit w istniejącej procedurze, nie brakująca procedura**. Zapisać przy `/finish` |
+| **Podbicie wersji szkicu** (`log-draft` v2 → v3 → v4) | wraca, ale **w jednym pliku**, więc jego domem jest docblock modułu i `app/lib/README.md`. Procedura z jednym klientem to procedura, której nikt nie znajdzie w chwili, gdy jej potrzebuje |
+
+**Zadanie 0 nie zakłada procedury — poprawia pięć istniejących.** Powód niżej; jest to warunek
+wykonalności całej reszty planu, nie porządki przy okazji.
+
+---
+
+# Blok 0 — warstwa procesu
+
+### Task 0: Pięć procedur FE mówi nieprawdę o gicie
+
+**Skill:** brak — to poprawka samych procedur, więc procedury opisującej ją nie ma i nie będzie:
+korekta faktu w skillu jest jednorazowa z definicji, a jej ślad zostaje w commicie.
+
+**Files:**
+
+- Modify: `.claude/skills/lib-module/SKILL.md`
+- Modify: `.claude/skills/list/SKILL.md`
+- Modify: `.claude/skills/route/SKILL.md`
+- Modify: `.claude/skills/component/SKILL.md`
+- Modify: `.claude/skills/e2e-test/SKILL.md`
+
+**Interfaces:**
+
+- Consumes: `calisthenos-fe/CLAUDE.md`, wiersze 20–21 i 128.
+- Produces: pięć procedur, których sekcja „Domknięcie" zgadza się z polityką drzewa.
+
+**Dlaczego to stoi PRZED Zadaniem 1, a nie w `/finish`.** Wszystkie pięć procedur kończy się
+zdaniem, że **git prowadzi Właściciel**. To był fakt do 2026-09-07 i przestał nim być decyzją
+Właściciela — `calisthenos-fe/CLAUDE.md` mówi dziś wprost: „Zniesiona decyzją Właściciela: agent
+commituje w tym drzewie tak samo jak w BE" (wiersz 20) i „Git prowadzi agent" (wiersz 128).
+
+Procedury zostały z poprzednim stanem. Konsekwencja jest mechaniczna, nie teoretyczna: **każde
+zadanie tego planu każe wykonawcy przeczytać swoją procedurę przed pierwszą linią kodu**, a każde
+zadanie kończy się commitem. Wykonawca dostanie więc dwa sprzeczne polecenia i nie ma jak
+rozstrzygnąć, które jest świeższe — plik skilla nie nosi daty.
+
+To jest zmiana warstwy procesu, więc obowiązuje ją reguła z `CLAUDE.md` korzenia: **zmienia
+sposób, w jaki powstaje kod, więc ciężar co najmniej średni.** Zakres jest jednak wąski —
+korekta faktu, zero nowej reguły — i cała mieści się w sekcjach „Domknięcie".
+
+- [ ] **Krok 1: Popraw pięć sekcji „Domknięcie"**
+
+Zdania do zastąpienia, dosłownie takie stoją dziś w plikach:
+
+| Plik | Dziś |
+| --- | --- |
+| `lib-module` | `Kończysz na /finish — **git prowadzi Właściciel**.` |
+| `list` | `Kończysz na /finish — **git prowadzi Właściciel**.` |
+| `route` | `pamiętaj, że **w tym drzewie git prowadzi Właściciel**, więc zamknięcie to relacja, nie commit.` |
+| `component` | `Kończysz na /finish — **git i Docker prowadzi Właściciel**.` |
+| `e2e-test` | `**Git i Docker prowadzi Właściciel.**` |
+
+Nowa treść niesie **obie** granice — tę, która padła, i te, które stoją — bo skill, z którego
+zniknęła granica, czyta się jak skill, w którym granic nie ma:
+
+> Kończysz na `/finish`. **Git prowadzi agent** — od 2026-09-07, tą samą konwencją co w BE.
+> Ale to drzewo **nie ma ani jednego hooka gita**, więc przed `git commit` uruchamiasz sam:
+> `npx tsc --noEmit` i `npx biome check <zmienione pliki>` — po plikach, nie po `.` (D-FE-1).
+> **`npm install` i Docker nadal prowadzi Właściciel.**
+
+W `component` i `e2e-test` człon o Dockerze **zostaje** — tam jest nadal prawdziwy; zmienia się
+wyłącznie człon o gicie. W `e2e-test` zostaje też zdanie o nieuruchamianiu Playwrighta.
+
+- [ ] **Krok 2: Sprawdź, że nie została ani jedna kopia**
+
+Run: `grep -rn "git prowadzi Właściciel\|Git i Docker prowadzi" calisthenos-fe/.claude/skills/`
+Expected: brak trafień.
+
+- [ ] **Krok 3: Commit**
+
+Commit idzie w drzewie FE (`calisthenos-fe`), bo `.claude/skills/` tego drzewa należy do jego
+repozytorium:
+
+```bash
+git add .claude/skills/lib-module/SKILL.md .claude/skills/list/SKILL.md .claude/skills/route/SKILL.md .claude/skills/component/SKILL.md .claude/skills/e2e-test/SKILL.md
+git commit -m "docs(skille): pięć procedur FE nadąża za polityką gita z 2026-09-07"
+```
 
 ---
 
@@ -87,7 +192,12 @@ niepoprawne. Liczba wierszy zostaje — cel serii z planu nadal obowiązuje.
 
 ### Task 1: Podbicie klienta API
 
-**Skill:** brak — podbicie zależności nie jest zmianą powierzchni tego drzewa. Regenerację kontraktu robi drzewo BE (`calisthenos-be:regen-client`, Zadanie 13 tamtego planu).
+**Skill:** `contract-change` — **kroki 5 i 6**, czyli druga połowa procedury przecinającej oba drzewa. Mieszka w **korzeniu** i wołasz ją **bez prefiksu**. Kroki 1–4 przeszły Zadaniem 12 planu BE; `calisthenos-be:regen-client` ma `disable-model-invocation: true` i **stąd go nie wołasz**.
+
+Ta procedura nosi `status: proponowany`, a to zadanie jest **pierwszym przebiegiem jej drugiej
+połowy** — kroki 5–6 nie były dotąd wykonane ani razu. Jeśli coś w niej nie zgadza się
+z rzeczywistością, **to jest znalezisko do zapisania**, nie przeszkoda do obejścia: `/finish`
+tego planu awansuje ją na `przyjęty` albo poprawia o to, co wyszło.
 
 **Files:**
 
@@ -112,15 +222,34 @@ Nie uruchamiaj go sam:
 
 - [ ] **Krok 2: Sprawdź, że nowe pola faktycznie są w typach**
 
+Dwa sprawdzenia, **nie jedno** — bo lista z pola **Produces** ma dwa rodzaje pozycji, a jedna
+komenda widzi tylko jeden z nich. Operacja jest **eksportowaną funkcją**, więc widać ją w czasie
+wykonania; pole DTO jest **typem**, więc znika przy kompilacji i `Object.keys` go nie zobaczy
+**nigdy** — także wtedy, gdy regeneracja poszła bez zarzutu.
+
 ```bash
-npx tsc --noEmit
-node -e "const m=require('@kalisthenos/api-client');console.log(Object.keys(m).filter(k=>/[Ee]xercise/.test(k)).join('\n'))"
+node -e "console.log(Object.keys(require('@kalisthenos/api-client')).filter(k=>/[Ee]xercise/.test(k)).join('\n'))"
 ```
 
-Szukasz w wyniku operacji listy dla `/v1/me/exercises`. **Jeśli jej nie ma — zatrzymaj się.**
-Znaczy to, że plan BE nie doszedł do Zadania 13 (`pnpm gen:contract`) albo pakiet nie został
-wydany. Nie obchodź tego ręcznym typem: przepisany typ DTO przestaje być kontraktem w chwili,
-gdy kontrakt się zmieni, i nikt tego nie zgłosi.
+Szukasz operacji listy dla `GET /v1/me/exercises` — funkcji, której dziś w tej liście **nie ma**.
+
+```bash
+grep -n -A9 "^export type WorkoutLogExerciseView" node_modules/@kalisthenos/api-client/dist/generated/types.gen.d.ts
+```
+
+Szukasz trzech pól: `origin`, `substitutedExerciseId`, `substitutedExerciseName`. Dziś ten typ ma
+dokładnie cztery pola (`exerciseId`, `exerciseName`, `unit`, `sets`) — **sprawdzone 2026-09-08**,
+więc masz z czym porównać wynik i „nic się nie zmieniło" nie przejdzie za sukces.
+
+```bash
+npx tsc --noEmit
+```
+
+**Jeśli którejkolwiek z tych rzeczy nie ma — zatrzymaj się i wróć do Kroku 5 procedury**, czyli
+do prośby o instalację. Znaczy to, że któryś z kroków 2–4 (regeneracja, `oasdiff`, changeset) nie
+doszedł do końca albo pakiet nie został wydany. **Nie obchodź tego ręcznym typem DTO** — kroki
+6 i „Czego nie robić" procedury zabraniają tego wprost: przepisany typ przestaje być kontraktem
+w chwili, gdy kontrakt się realnie zmieni, i nie zgłosi tego nic.
 
 - [ ] **Krok 3: Commit**
 
@@ -133,7 +262,20 @@ git commit -m "chore(deps): klient API z pochodzeniem wpisu i trasą /v1/me/exer
 
 ### Task 2: `listActiveExercisesForTrainee`
 
-**Skill:** `calisthenos-fe:lib-module` — jedyne miejsce, które rozmawia z backendem, pisane test-first przeciw podstawionemu klientowi. Przeczytaj też `calisthenos-fe:list` i **rozstrzygnij w Kroku 1**, czy jego konwencja (porządkowanie i zawężanie przez parametry URL) obowiązuje tu, czy nie: ten moduł ściąga wszystkie strony, a filtruje wybierak po stronie klienta. Jeśli skill mówi inaczej niż ten plan, **wygrywa skill** — wtedy wróć z tym do mnie.
+**Skill:** `calisthenos-fe:lib-module` — jedyne miejsce, które rozmawia z backendem, pisane test-first przeciw podstawionemu klientowi.
+
+**`calisthenos-fe:list` świadomie NIE obowiązuje w tym zadaniu — rozstrzygnięte tutaj, nie
+w wykonaniu.** Tamta procedura rządzi **widokiem nawigowalnym**: porządkiem, zawężaniem
+i szukajką zapisanymi w adresie, przez `parseListControls` i `<ListControls>`. Wybierak jest
+modalem — nie ma adresu, do którego miałby cokolwiek zapisać, nie przeżywa odświeżenia i nie da
+się go wysłać odnośnikiem, więc trzy powody istnienia tamtej konwencji odpadają naraz.
+
+Jedno ostrzeżenie z tamtej procedury **zostaje w mocy i trzeba je odnotować**: „lista pobierająca
+wszystko i tnąca w locie działa do pierwszego trenera z setką podopiecznych". Tutaj granicą jest
+biblioteka **jednego** trenera przy stronie po 24, a nie katalog — dokładnie ta sama granica,
+którą przyjął i zapisał w docblocku `listActiveExercisesForTrainer`. Powielamy istniejący
+precedens, nie zakładamy drugiej konwencji; gdy biblioteki urosną, zmiana zaczyna się
+w kontrakcie, nie tutaj.
 
 **Files:**
 
@@ -198,8 +340,28 @@ Expected: FAIL — „listActiveExercisesForTrainee is not a function".
 
 - [ ] **Krok 3: Napisz moduł**
 
-Tuż pod `listActiveExercisesForTrainer`, z **wydzieloną** pętlą po stronach, żeby dwa warianty
-nie miały dwóch kopii tego samego `for`:
+**Dwie pułapki, obie sprawdzone w kodzie 2026-09-08, obie ciche.**
+
+**Pierwsza: `allPages` nie istnieje.** Dziś `listActiveExercisesForTrainer`
+(`app/lib/exercises.ts:26`) niesie pętlę `for` **w swoim ciele**, wołając prywatny
+`activeExercisePage`. Wydzielenie wspólnego `allPages` jest więc **zmianą także wariantu
+trenera**, a ten karmi edytor planu i formularz startowy. To refaktor jadący na barana:
+`calisthenos-fe:lib-module` żąda test-first, a `/refactor` z korzenia — **zielonych testów przed
+dotknięciem kodu**. Kolejność jest zatem sztywna: najpierw `npx vitest run
+app/lib/exercises.test.ts` na nietkniętym pliku (istniejące testy wariantu trenera mają być
+zielone), potem wydzielenie, potem znów ten sam przebieg. Jeśli wolisz tego uniknąć — **powiel
+pętlę i zostaw wariant trenera nietknięty**; sześć wierszy duplikatu jest tańsze niż niezamierzona
+zmiana w dwóch działających ekranach. Rozstrzygnij i **zapisz powód w ciele commita**.
+
+**Druga: `status` w zapytaniu daje `400`, nie ciche pominięcie.** Wariant trenera wysyła
+`query: { page, sort: "name", status: "active" }`. Kopiując go, skopiujesz `status` — a
+`MyExerciseListQuery` **nie ma tego pola**: status jest po tamtej stronie wymuszony na `active`
+i to jest zawężenie kontraktu, nie wartość domyślna. Backend stoi na `whitelist +
+forbidNonWhitelisted`, więc `?status=active` wraca jako **`400`**, nie jako zignorowany parametr.
+Dozwolone są `page`, `q`, `sort`, `unit`, `tag`.
+
+Poniżej kształt docelowy; nazwę operacji klienta i nazwę pomocnika strony **odczytaj z pakietu po
+Zadaniu 1**, nie przepisuj z tego bloku:
 
 ```ts
 export interface PickableExercise {
@@ -247,7 +409,14 @@ git commit -m "feat(lib): czynna biblioteka trenera widziana przez podopiecznego
 
 ### Task 3: Trasa zasobowa wybieraka
 
-**Skill:** `calisthenos-fe:route` — plik PLUS wpis w `app/routes.ts`, loader i akcja. Trasa zasobowa jest przypadkiem szczególnym: sam loader, bez komponentu.
+**Skill:** `calisthenos-fe:route` — plik PLUS wpis w `app/routes.ts`, i ten sam zakaz importu wartości z klienta.
+
+**Trasa zasobowa jest przypadkiem, którego ta procedura NIE opisuje** — mówi „loader czyta, akcja
+mutuje" i zakłada komponent. Tutaj komponentu nie ma: sam `loader`, wzorem
+`app/routes/upload.wideo.tsx`. Reszta procedury obowiązuje bez zmian, bo trasa zasobowa to nadal
+**dwa miejsca** (plik + `app/routes.ts`) i nadal nie wolno jej wołać klienta. Po tym zadaniu będą
+w drzewie dwa takie pliki, więc **luka w procedurze przestaje być jednorazowa** — dopisanie do
+niej akapitu o trasach zasobowych jest pozycją dla `/finish`, odnotowaną w rejestrze wyżej.
 
 **Files:**
 
@@ -485,7 +654,7 @@ nie zaprojektował.
 
 ### Task 5: Wpisy logowania i budowanie ładunku
 
-**Skill:** `calisthenos-fe:lib-module`.
+**Skill:** `calisthenos-fe:lib-module` — test-first, i **to on rozstrzyga, gdzie ma stać budowanie ładunku**: `app/lib` jest jedyną warstwą rozmawiającą z kontraktem, więc sześćdziesiąt linii składania ciała żądania nie należy do akcji trasy. Przenosiny są przy tym refaktorem istniejącego zachowania — `toLoggingEntries` ma dziś swoje testy i mają być **zielone przed dotknięciem pliku**.
 
 **Files:**
 
@@ -614,10 +783,17 @@ git commit -m "feat(lib): wpisy logowania z pochodzeniem i budowanie ładunku po
 
 **Skill:** `calisthenos-fe:component` — zgodność z design-systemem i **zakaz własnych wywołań backendu** w komponencie. Dlatego lista wchodzi propsem albo `useFetcher`-em z trasy, nigdy importem klienta.
 
+**`frontend-design:frontend-design` świadomie NIE jest wołany**, choć procedura komponentu
+odsyła do niego „gdy zmiana dotyka wyglądu". To zadanie **składa** wybierak z rzeczy, które
+drzewo już ma — `Modal` z `app/components/modal.tsx` i układ listy wzorem `OnboardingPicker` —
+a nie projektuje nowego widoku. Nie wprowadzasz przy tym **żadnej** wartości koloru, odstępu ani
+kroju wprost; wszystko idzie tokenami z `app/styles/`. Gdyby wybierak miał dostać własny język
+wizualny, to jest osobne zadanie i wtedy tamta procedura wchodzi.
+
 **Files:**
 
 - Create: `app/components/exercise-picker.tsx`
-- Test: `app/components/exercise-picker.test.tsx`
+- Test: `app/components/exercise-picker.test.ts`
 
 **Interfaces:**
 
@@ -628,37 +804,46 @@ Wzorem `OnboardingPicker` (`app/components/onboarding-picker.tsx`): szukajka po 
 nad wczytaną listą. Różnice: wybór **jednokrotny**, modal (nie sekcja formularza), lista schodzi
 przez `useFetcher` przy pierwszym otwarciu.
 
-- [ ] **Krok 1: Napisz testy**
+- [ ] **Krok 1: Napisz testy — bez renderowania**
 
-```tsx
-it("filtruje po nazwie, bez względu na wielkość liter", async () => {
-  render(<ExercisePicker open exercises={[ex("Podciąganie"), ex("Deska")]} onPick={vi.fn()} onClose={vi.fn()} />);
-  await user.type(screen.getByLabelText(/szukaj/i), "desk");
-  expect(screen.queryByText("Podciąganie")).not.toBeInTheDocument();
-  expect(screen.getByText("Deska")).toBeInTheDocument();
+**Rozstrzygnięte tutaj, sprawdzone w drzewie 2026-09-08: `@testing-library/react` NIE jest
+zainstalowane.** Jest `happy-dom` i vitest ma na nim `environment`, a `app/**/*.test.tsx` stoi
+w `include` — ale **w `app/components/` nie ma dziś ani jednego testu**. Dołożenie
+testing-library znaczyłoby `npm install` (Właściciel) **i** założenie pierwszej konwencji testów
+komponentów w tym drzewie — obie rzeczy są decyzją Właściciela, nie skutkiem ubocznym zadania
+o wybieraku. **Nie dokładaj zależności.**
+
+Testujesz więc **czystą funkcję filtrującą**, wydzieloną z komponentu — a nie komponent:
+
+```ts
+// app/components/exercise-picker.test.ts — .ts, nie .tsx: nic tu nie renderuje
+import { filterExercises } from "./exercise-picker";
+
+const ex = (id: string, name: string) => ({ id, name, unit: "REPS" as const, tracksRpe: true });
+
+it("filtruje po nazwie, bez względu na wielkość liter", () => {
+  const lista = [ex("a", "Podciąganie"), ex("b", "Deska")];
+  expect(filterExercises(lista, "desk").map((e) => e.name)).toEqual(["Deska"]);
 });
 
-it("oddaje wybrane ćwiczenie i zamyka się", async () => {
-  const onPick = vi.fn();
-  render(<ExercisePicker open exercises={[ex("Deska")]} onPick={onPick} onClose={vi.fn()} />);
-  await user.click(screen.getByText("Deska"));
-  expect(onPick).toHaveBeenCalledWith(expect.objectContaining({ name: "Deska" }));
+it("odsiewa ćwiczenie, które właśnie zastępujemy", () => {
+  const lista = [ex("a", "Podciąganie"), ex("b", "Deska")];
+  expect(filterExercises(lista, "", ["b"]).map((e) => e.name)).toEqual(["Podciąganie"]);
 });
 
-it("pusta biblioteka mówi, co zrobić, zamiast pokazywać pustkę", async () => {
-  render(<ExercisePicker open exercises={[]} onPick={vi.fn()} onClose={vi.fn()} />);
-  expect(screen.getByText(/trener nie ma jeszcze ćwiczeń/i)).toBeInTheDocument();
+it("pusta szukajka oddaje całość, nie pustkę", () => {
+  const lista = [ex("a", "Podciąganie"), ex("b", "Deska")];
+  expect(filterExercises(lista, "  ")).toHaveLength(2);
 });
 ```
 
-Sprawdź, czy to drzewo ma już `@testing-library/react` — jeśli **nie ma**, nie dokładaj
-zależności dla trzech testów. Zamiast tego wydziel czystą funkcję filtrującą
-(`filterExercises(list, query)`) i przetestuj ją bez renderowania, a komponent zostaw pod
-Playwrightem z Zadania 10. **Zdecyduj to w Kroku 1 i zapisz decyzję w commicie.**
+Zachowanie samego modala — otwarcie, wybór, Esc, komunikat pustej biblioteki — schodzi pod
+scenariusz Playwrighta z Zadania 10. **Zapisz tę granicę w docblocku komponentu**, żeby następny
+czytelnik nie wziął braku testu renderującego za przeoczenie.
 
 - [ ] **Krok 2: Uruchom — ma paść**
 
-Run: `npx vitest run app/components/exercise-picker.test.tsx`
+Run: `npx vitest run app/components/exercise-picker.test.ts`
 Expected: FAIL — plik nie istnieje.
 
 - [ ] **Krok 3: Napisz komponent**
@@ -672,16 +857,20 @@ Kluczowe własności, każda z powodem:
   zaraz będzie liczył; bez tego nie wie, czy wpisze powtórzenia, czy sekundy.
 - **Ładowanie leniwe** — `useFetcher` do `/biblioteka-cwiczen` przy pierwszym `open`, z widocznym
   stanem ładowania. Drugie otwarcie nie pyta ponownie.
-- **Zamknięcie klawiszem Esc i kliknięciem tła**, wzorem `app/components/modal.tsx` — jeśli ten
-  komponent istnieje, **użyj go**, nie pisz drugiego modala.
+- **Modal bierzesz z `app/components/modal.tsx`** — ten komponent **istnieje** (sprawdzone
+  2026-09-08) i eksportuje `Modal({ open, onClose, title, wide, children })`, czyli dokładnie
+  powierzchnię, której to zadanie potrzebuje. Zamknięcie Esc i kliknięciem tła jest jego
+  własnością, nie Twoją. **Nie pisz drugiego modala** — drzewo ma już `modal.tsx`,
+  `video-modal.tsx`, `photo-lightbox.tsx` i `confirm-provider.tsx`; piąty sposób zamykania
+  okienka to piąte miejsce do poprawienia.
 
 - [ ] **Krok 4: Uruchom, sprawdź, commituj**
 
 ```bash
-npx vitest run app/components/exercise-picker.test.tsx
+npx vitest run app/components/exercise-picker.test.ts
 npx tsc --noEmit
-npx biome check app/components/exercise-picker.tsx app/components/exercise-picker.test.tsx
-git add app/components/exercise-picker.tsx app/components/exercise-picker.test.tsx
+npx biome check app/components/exercise-picker.tsx app/components/exercise-picker.test.ts
+git add app/components/exercise-picker.tsx app/components/exercise-picker.test.ts
 git commit -m "feat(komponenty): wybierak ćwiczeń z biblioteki trenera"
 ```
 
@@ -893,7 +1082,7 @@ git commit -m "feat(historia): pochodzenie wpisu w szczególe logu po obu strona
 
 ### Task 10: Playwright — pisany, nieuruchamiany
 
-**Skill:** `calisthenos-fe:e2e-test` — **wywołaj go, zanim zdecydujesz o kształcie scenariusza**. Mówi wprost: używać oszczędnie i świadomie, dla przepływów, których nie da się dowieść przy podstawionym kliencie. Katalog to `tests/e2e/`, który dziś nie istnieje — ten test jest w tym drzewie **pierwszy**, więc zakłada też konwencję.
+**Skill:** `calisthenos-fe:e2e-test` — **przeczytaj go, zanim zdecydujesz o kształcie scenariusza**. Mówi wprost: używać oszczędnie i świadomie, dla przepływów, których nie da się dowieść przy podstawionym kliencie, i nazywa dwa sposoby, na jakie taki test przechodzi z niewłaściwego powodu.
 
 **Files:**
 
@@ -904,20 +1093,38 @@ git commit -m "feat(historia): pochodzenie wpisu w szczególe logu po obu strona
 - Consumes: cały ekran po Zadaniu 8.
 - Produces: scenariusz do uruchomienia przez właściciela.
 
-**Piszesz, nie uruchamiasz.** Docker i stack prowadzi właściciel — to granica tego drzewa.
+**Piszesz, nie uruchamiasz.** Docker i stack prowadzi Właściciel — to granica tego drzewa,
+a skill mówi, dlaczego nie jest to wygoda: bez działającego backendu Playwright **nie padnie na
+asercji, tylko nie wystartuje**, a to w logu wygląda inaczej niż czerwień i bywa przeoczone.
 
-- [ ] **Krok 1: Napisz jeden scenariusz, trzy asercje**
+**Katalog jest przygotowany, ale PUSTY — i to jest stan sprawdzony, nie domysł.** `tests/`
+zawiera dziś wyłącznie `README.md`; `playwright.config.ts` ma już `testDir: "./tests/e2e"`,
+a `package.json` — skrypt `e2e`. Konfiguracji więc **nie zakładasz**. Zakładasz za to **plik
+pierwszy w tym katalogu**, więc:
+
+> **Nie ma się na czym wzorować w `tests/`.** Cokolwiek ustalisz — nazwy selektorów, sposób
+> logowania, przygotowanie danych — **zostanie skopiowane** do każdego następnego scenariusza.
+> Wybieraj świadomie i zapisz wybór w `tests/README.md` (Zadanie 11), nie tylko w kodzie.
+
+- [ ] **Krok 1: Napisz jeden scenariusz**
 
 Ścieżka: wejście na sesję → dołożenie szóstej serii → wymiana drugiego ćwiczenia → dodanie
 ćwiczenia spoza planu → zapis → szczegół logu pokazuje `zamiast: …` i `poza planem`.
 
-Wzoruj się na istniejących plikach w `tests/` — selektory, logowanie i przygotowanie danych mają
-tam swoją konwencję i nie zakładaj drugiej.
+Trzy asercje, każda na **treści**, nie na obecności elementu — skill nazywa „asercję na tym, że
+coś się wyrenderowało" jednym z dwóch sposobów przejścia z niewłaściwego powodu:
 
-- [ ] **Krok 2: Poproś właściciela o uruchomienie**
+1. wpis zamieniony niesie **nazwę ćwiczenia zastąpionego**, nie samą etykietę „zamiast";
+2. wpis spoza planu jest oznaczony **i stoi po wpisach planowanych**;
+3. szósta seria zapisała się z **wpisaną wartością**, nie jako pusty wiersz.
+
+- [ ] **Krok 2: Poproś Właściciela o uruchomienie**
+
+Komenda tego drzewa to `npm run e2e` (`package.json`), a `testDir` niesie już konfiguracja:
 
 > Scenariusz gotowy, nie uruchamiam go. Gdy będziesz miał stack, uruchom proszę
-> `npx playwright test tests/e2e/sesja-poza-planem.spec.ts`.
+> `npm run e2e` — to pierwszy plik w `tests/e2e/`, więc jest to zarazem pierwszy przebieg
+> Playwrighta w tym drzewie i może wymagać `npx playwright install`.
 
 - [ ] **Krok 3: Commit**
 
@@ -931,11 +1138,11 @@ git commit -m "test(e2e): ścieżka wymiany i ćwiczenia spoza planu"
 
 ### Task 11: README i domknięcie
 
-**Skill:** brak; domknięcie idzie `/finish` z korzenia.
+**Skill:** brak — aktualizacja map katalogów nie jest osobnym konstruktem, tylko krokiem 2 procedury `/finish`, który tu dostaje własne zadanie wyłącznie dlatego, że dotyka czterech dokumentów naraz. Samo domknięcie idzie `/finish` z korzenia.
 
 **Files:**
 
-- Modify: `app/lib/README.md`, `app/components/README.md`, `app/routes/README.md`
+- Modify: `app/lib/README.md`, `app/components/README.md`, `app/routes/README.md`, `tests/README.md`
 
 **Interfaces:**
 
@@ -953,12 +1160,23 @@ budowanie ładunku; `exercises` ma dwa warianty listy o różnych rolach.
 `app/routes/README.md`: trasa zasobowa `biblioteka-cwiczen` i **dlaczego stoi poza blokiem
 `podopieczny`** (nie należy do layoutu, wzorem `upload/wideo`).
 
+`tests/README.md`: **twierdzenie ujemne przestało być prawdziwe.** Dokument mówi dziś, że
+`tests/e2e/` „jest na te testy przygotowany, ale **jeszcze pusty** — powstają po cutoverze".
+Zadanie 10 czyni go niepustym, więc to zdanie trzeba zastąpić — a przy okazji zapisać konwencję,
+którą tamten scenariusz ustanowił (selektory, logowanie, przygotowanie danych), bo będzie
+kopiowana. Wymaga tego sekcja „Domknięcie" procedury `calisthenos-fe:e2e-test`.
+
+**Twierdzenie ujemne jest jedynym rodzajem zdania, którego zwietrzenie nie ujawnia się przy
+czytaniu** (`/finish`, krok 2): „nie ma tu jeszcze X" czyta się gładko długo po tym, jak X
+powstało, i zaprasza następnego do napisania drugiej ścieżki. Dlatego ten wiersz nie jest
+sprzątaniem po zadaniu, tylko jego częścią.
+
 - [ ] **Krok 2: Commit**
 
 ```bash
-npx biome check app/lib/README.md app/components/README.md app/routes/README.md
-git add app/lib/README.md app/components/README.md app/routes/README.md
-git commit -m "docs: szkic v4, wybierak i trasa zasobowa w mapach katalogów"
+npx biome check app/lib/README.md app/components/README.md app/routes/README.md tests/README.md
+git add app/lib/README.md app/components/README.md app/routes/README.md tests/README.md
+git commit -m "docs: szkic v4, wybierak i pierwszy scenariusz e2e w mapach katalogów"
 ```
 
 - [ ] **Krok 3: `/finish`**
@@ -978,5 +1196,11 @@ sprawdzenie prawdziwości README, przegląd i commit polityką tego drzewa.
 - [ ] Wymiana czyści serie i nie pozwala wybrać ćwiczenia, które zastępuje
 - [ ] Pasek postępu i `allDone` nie kłamią po wymianie
 - [ ] Trasa `biblioteka-cwiczen` ma wpis w `app/routes.ts`
-- [ ] Scenariusz Playwrighta **napisany**; uruchomienie należy do właściciela
-- [ ] Trzy README mówią to samo, co kod
+- [ ] Scenariusz Playwrighta **napisany**; uruchomienie należy do Właściciela
+- [ ] Cztery README mówią to samo, co kod — w tym `tests/README.md`, w którym twierdzenie
+      „katalog jeszcze pusty" przestało być prawdziwe
+- [ ] `grep -rn "git prowadzi Właściciel" calisthenos-fe/.claude/skills/` — **brak trafień**
+      (Zadanie 0)
+- [ ] **`contract-change` rozstrzygnięty w `/finish`**: `przyjęty`, jeśli kroki 5–6 poszły tak,
+      jak je opisuje, albo poprawiony o to, co wyszło. Procedura, która została `proponowana`
+      po zamknięciu swojego planu, jest czerwoną lampką — nie stanem spoczynkowym
