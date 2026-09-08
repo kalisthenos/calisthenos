@@ -206,10 +206,26 @@ tego planu awansuje ją na `przyjęty` albo poprawia o to, co wyszło.
 
 **Interfaces:**
 
-- Consumes: pakiet `@kalisthenos/api-client` wydany po planie BE.
-- Produces: typy `LogWorkoutExerciseDto.origin`, `.substitutedExerciseId`,
-  `WorkoutLogExerciseView.origin`, `.substitutedExerciseId`, `.substitutedExerciseName`
-  oraz operacja listy `GET /v1/me/exercises`.
+- Consumes: pakiet `@kalisthenos/api-client` wydany po planie BE. **Dziś w tym drzewie stoi
+  `0.3.0`**; changeset podnosi `0.4.0 → 0.5.0`.
+- Produces — **nazwy dosłowne, odczytane z wygenerowanego klienta w BE 2026-09-08**, nie z opisu
+  zmiany. Krok 6 procedury sprawdza tę listę, nie wymyśla własnej:
+
+  | Co | Nazwa |
+  | --- | --- |
+  | operacja listy | `myExercisesControllerList` → `GET /v1/me/exercises` |
+  | jej parametry | `page`, `q`, `sort`, `unit`, `tag` — **`status` NIE ISTNIEJE** |
+  | typ `sort` | unia `'name' \| '-name' \| 'newest' \| 'oldest'`, nie goły napis |
+  | odpowiedź | `ExercisePage` = `{ items: ExerciseView[]; page; totalPages; total }` |
+  | pola potrzebne z `ExerciseView` | `id`, `name`, `unit`, **`tracksRpe`** |
+  | zapis | `LogWorkoutExerciseDto.origin`, `.substitutedExerciseId` |
+  | odczyt | `WorkoutLogExerciseView.origin`, `.substitutedExerciseId`, `.substitutedExerciseName` |
+  | przegląd | `PlanSessionUsageView.offPlan`, `PlanExerciseUsageView.substitutedBy` |
+
+  **`LogWorkoutExerciseDto.sets` nie ma `maxItems` i nie będzie miał** — sufit 50 serii
+  egzekwuje reguła domenowa, a przekroczenie wraca jako `400 WORKOUT_LOG_TOO_LARGE`
+  z `details.limit` i `details.got`. Decyzja Właściciela z 2026-09-08; nie odtwarzaj tej
+  granicy po stronie FE jako twardej blokady pola, bo nie jest częścią kontraktu.
 
 - [ ] **Krok 1: Poproś właściciela o podbicie zależności**
 
@@ -360,8 +376,9 @@ i to jest zawężenie kontraktu, nie wartość domyślna. Backend stoi na `white
 forbidNonWhitelisted`, więc `?status=active` wraca jako **`400`**, nie jako zignorowany parametr.
 Dozwolone są `page`, `q`, `sort`, `unit`, `tag`.
 
-Poniżej kształt docelowy; nazwę operacji klienta i nazwę pomocnika strony **odczytaj z pakietu po
-Zadaniu 1**, nie przepisuj z tego bloku:
+Operacja klienta nazywa się **`myExercisesControllerList`** i bierze
+`{ client: api, query: { page, sort: 'name' }, throwOnError: true }` — bez `status`. Kształt
+docelowy niżej; pomocnik strony nazwij wzorem `activeExercisePage`, czyli `myExercisePage`:
 
 ```ts
 export interface PickableExercise {
