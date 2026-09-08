@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useFetcher } from "react-router";
 import type { PickableExercise } from "~/lib/exercises";
 import { Icons } from "./icons";
@@ -49,14 +49,25 @@ export function ExercisePicker({
   excludeIds,
   excludedNote,
 }: ExercisePickerProps) {
-  const fetcher = useFetcher<{ exercises: PickableExercise[] }>();
+  const fetcher = useFetcher<{ exercises: PickableExercise[]; error: string | null }>();
   const [q, setQ] = useState("");
+  // Czy w ogóle prosiliśmy o bibliotekę. Bez tego pierwsza klatka po otwarciu
+  // (jeszcze przed efektem) wyglądałaby jak awaria: dane puste, fetcher `idle`.
+  const proszono = useRef(false);
+
+  const wczytaj = () => {
+    proszono.current = true;
+    fetcher.load("/biblioteka-cwiczen");
+  };
 
   // biome-ignore lint/correctness/useExhaustiveDependencies: `fetcher` zmienia referencję co render — start wczytywania ma sterować wyłącznie `open`
   useEffect(() => {
     if (open) {
-      if (fetcher.data === undefined && fetcher.state === "idle") {
-        fetcher.load("/biblioteka-cwiczen");
+      // Ponawiamy też po nieudanej próbie: `fetcher.data` jest wtedy OBECNE
+      // (trasa zasobowa nie rzuca, tylko oddaje `error`), więc sam warunek
+      // „brak danych" zamroziłby wybierak na komunikacie o awarii na zawsze.
+      if (fetcher.state === "idle" && (fetcher.data === undefined || fetcher.data.error != null)) {
+        wczytaj();
       }
     } else {
       setQ("");
@@ -68,7 +79,15 @@ export function ExercisePicker({
     onClose();
   }
 
-  const loading = fetcher.data === undefined;
+  // Awaria przychodzi DANYMI z trasy zasobowej (`error`). Drugi człon łapie
+  // przypadek, w którym `fetcher` osiadł bez żadnych danych — wtedy komunikat
+  // jest ogólny, ale wybierak nadal ma przycisk, zamiast kręcić się w kółko.
+  const blad =
+    fetcher.data?.error ??
+    (proszono.current && fetcher.state === "idle" && fetcher.data === undefined
+      ? "Nie udało się wczytać biblioteki ćwiczeń."
+      : null);
+  const loading = fetcher.data === undefined && blad == null;
   const library = fetcher.data?.exercises ?? [];
   const visible = filterExercises(library, q, excludeIds);
   // Ile ćwiczeń pasowało do szukajki, ale wypadło przez odsiew — rozróżnia
@@ -80,6 +99,16 @@ export function ExercisePicker({
       <div className="modal-body">
         {loading ? (
           <div className="text-sm muted">Wczytywanie ćwiczeń…</div>
+        ) : blad != null ? (
+          <div className="empty">
+            <h3>Nie udało się wczytać biblioteki</h3>
+            <div>{blad} Twój formularz jest cały — nic z niego nie zniknęło.</div>
+            <div style={{ marginTop: 12 }}>
+              <button type="button" className="btn btn-sm" onClick={wczytaj}>
+                Spróbuj ponownie
+              </button>
+            </div>
+          </div>
         ) : library.length === 0 ? (
           <div className="empty">
             <h3>Biblioteka jest pusta</h3>
