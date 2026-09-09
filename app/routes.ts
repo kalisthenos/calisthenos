@@ -6,6 +6,7 @@ export default [
   route("wyloguj", "routes/wyloguj.tsx"),
   route("zaproszenie/:token", "routes/zaproszenie.$token.tsx"),
   route("upload/wideo", "routes/upload.wideo.tsx"),
+  route("biblioteka-cwiczen", "routes/biblioteka-cwiczen.tsx"),
   // Sonda dla healthchecka platformy — MUSI zwracać 200. NIE podmieniaj na "/":
   // trasa indeksowa zawsze przekierowuje, a Railway 3xx traktuje jako awarię.
   route("healthz", "routes/healthz.tsx"),

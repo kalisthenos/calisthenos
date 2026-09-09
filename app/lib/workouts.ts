@@ -17,32 +17,46 @@ import type {
 import { orNull, publicFileUrl } from "~/lib/api/client";
 import type { Api } from "~/lib/api/client";
 import { ApiError } from "~/lib/api/errors";
+import type { PayloadEntry, SetDraft } from "./log-draft";
 
 // ============================================================
 // Domain types
 // ============================================================
 
 /**
- * A flattened "entry" the trainee logs against. Each plan item produces one
- * entry; for dropset blocks, each drop becomes its own entry (with the block's
- * sets count). Entries are ordered by (sessionOrdinal, blockOrdinal, itemOrdinal).
+ * Wpis formularza logowania jako STAN, nie odbicie planu: niesie pochodzenie
+ * (`origin`) i własną liczbę serii, bo wymiana ćwiczenia podmienia wpis
+ * W MIEJSCU, a dodatek spoza planu nie ma pozycji planu w ogóle. Nadzbiór
+ * `DraftEntry` (`log-draft.ts`) — dokłada wyłącznie pola do RYSOWANIA karty
+ * (`note`, `expectedReps`, `plannedSets`, `substitutedExerciseName`,
+ * `isDropsetItem`), więc `LogEntry[]` przechodzi bez rzutowania wszędzie,
+ * gdzie kontrakt woła `DraftEntry[]` (`serializeDraft`) albo `PayloadEntry[]`
+ * (`buildLogPayload`). `key` był na tej liście do v4 szkicu — od v5 wozi go
+ * sam `DraftEntry`, bo bez niego nie da się przywrócić szkicu o przestawionej
+ * kolejności.
+ *
+ * Zastąpił `LoggingEntry`, który odbijał plan i nie umiał wyrazić ani zamiany,
+ * ani wpisu spoza planu. Stary kształt zniknął razem z `toLoggingEntries`
+ * wtedy, gdy trasa `podopieczny/loguj.$sessionId.tsx` przeszła na ten — nie
+ * wcześniej, bo do tej chwili był jej jedynym kształtem.
  */
-export interface LoggingEntry {
-  /** The plan_item id this entry maps to (for reference; not directly used by writers). */
-  planItemId: string;
+export interface LogEntry {
+  /** Stabilny klucz Reacta — NIE indeks: wpisy dochodzą i są wymieniane. */
+  key: string;
   exerciseId: string;
   exerciseName: string;
   unit: "REPS" | "SEC";
-  /** Number of sets the trainee is expected to perform. */
-  expectedSets: number;
-  /** Target reps (or seconds) per set. */
-  expectedReps: number;
-  /** Optional trainer note. */
-  note: string | null;
-  /** Whether this entry belongs to a dropset block (UI affordance only). */
-  isDropsetItem: boolean;
-  /** Czy ćwiczenie zbiera ocenę trudności (RPE) per seria. */
   tracksRpe: boolean;
+  origin: "planned" | "substitute" | "extra";
+  substitutedExerciseId: string | null;
+  /** Nazwa zastąpionego — do etykiety „zamiast: …". `null` poza zamianą. */
+  substitutedExerciseName: string | null;
+  /** Cel z planu — podpowiedź, nie ograniczenie. `null` dla `extra`. */
+  plannedSets: number | null;
+  expectedReps: number | null;
+  note: string | null;
+  isDropsetItem: boolean;
+  sets: SetDraft[];
 }
 
 // ============================================================
@@ -99,27 +113,40 @@ export async function loadSessionForLogging(
 }
 
 /**
- * Spłaszczenie sesji do wpisów formularza logowania — jedna pozycja planu = jeden
- * wpis; w dropsecie liczbę serii niesie BLOK, a pozycje mają `sets: null`.
- * Czysta funkcja: do integracji robił to `loadSessionForLogging(db)` po drodze
- * z bazy, więc nie miała testu. Kształt `LoggingEntry` zostaje — formularz
- * i akcja czytają go bez zmian.
+ * Spłaszczenie sesji do wpisów formularza logowania — jedna pozycja planu =
+ * jeden wpis; w dropsecie liczbę serii niesie BLOK (pozycje mają wtedy
+ * `sets: null`), w single/superset — pozycja. Każdy wpis wraca z
+ * `origin: "planned"` i pustym wskaźnikiem zamiany: wymianę i dodatek spoza
+ * planu dokłada dopiero formularz, ta funkcja tylko SIEJE stan z planu.
+ * `sets` startuje jako `plannedSets` pustych wierszy — dotąd robił to
+ * inicjalizator `useState` w trasie; tu jest to samo, ale przetestowane
+ * i bez duplikatu w dwóch plikach.
  */
-export function toLoggingEntries(session: SessionDetailView): LoggingEntry[] {
-  const entries: LoggingEntry[] = [];
+export function toLogEntries(session: SessionDetailView): LogEntry[] {
+  const entries: LogEntry[] = [];
   for (const block of session.blocks) {
     const isDropset = block.kind === "dropset";
     for (const item of block.items) {
+      const plannedSets = isDropset ? (block.sets ?? 1) : (item.sets ?? 1);
       entries.push({
-        planItemId: item.id,
+        key: item.id,
         exerciseId: item.exerciseId,
         exerciseName: item.exerciseName,
         unit: item.unit,
-        expectedSets: isDropset ? (block.sets ?? 1) : (item.sets ?? 1),
+        tracksRpe: item.tracksRpe,
+        origin: "planned",
+        substitutedExerciseId: null,
+        substitutedExerciseName: null,
+        plannedSets,
         expectedReps: item.reps,
         note: item.note,
         isDropsetItem: isDropset,
-        tracksRpe: item.tracksRpe,
+        sets: Array.from({ length: plannedSets }, () => ({
+          reps: "",
+          difficulty: "",
+          skipped: false,
+          videoFileId: null,
+        })),
       });
     }
   }
@@ -270,7 +297,74 @@ export interface SaveSetInput {
 
 export interface SaveExerciseLogInput {
   exerciseId: string;
+  /**
+   * Pochodzenie wpisu i wskaźnik na zastąpione ćwiczenie — OPCJONALNE, bo
+   * kontrakt (`LogWorkoutExerciseDto`) tak je deklaruje i bo dzisiejsza trasa
+   * (`podopieczny/loguj.$sessionId.tsx`, do Zadania 8) buduje ładunek bez
+   * nich. `buildLogPayload` (niżej) wypełnia je zawsze; `saveWorkoutLog`
+   * przepisuje je do ciała BEZ WARUNKU — `undefined` ginie w
+   * `JSON.stringify` tak samo jak nieobecny klucz, więc stary wołający nie
+   * widzi żadnej różnicy na drucie (potwierdzone przeciw wysłanemu JSON-owi
+   * w `workouts.test.ts`, nie tylko przeciw typom).
+   */
+  origin?: "planned" | "substitute" | "extra";
+  substitutedExerciseId?: string | null;
   sets: SaveSetInput[];
+}
+
+export interface LogPayloadExercise {
+  exerciseId: string;
+  origin: "planned" | "substitute" | "extra";
+  substitutedExerciseId: string | null;
+  sets: SaveSetInput[];
+}
+
+/**
+ * Ciało `exercises` zapisu, budowane z WPISÓW (`PayloadEntry`, czyli `DraftEntry`
+ * bez klucza — więc też z ich nadzbioru `LogEntry`) — dotąd 60 linii wewnątrz
+ * `try` akcji trasy.
+ *
+ * **Kolejność wpisów jest kolejnością WYKONANIA i przenosi ją sama tablica.**
+ * Ładunek nie ma osobnego pola na pozycję ćwiczenia i nie potrzebuje go: agregat
+ * BE nadaje `ordinal` z indeksu tablicy, a oba szczegóły logu oddają wpisy
+ * `order by ordinal`. Przestawianiem steruje `moveEntry` (`lib/log-draft`). Trzy
+ * reguły: (1) wpis bez ani jednej wypełnionej serii wypada z ładunku
+ * CAŁKOWICIE — inaczej poleciałoby `sets: []` za ćwiczenie, którego nikt nie
+ * tknął; (2) `ordinal` to POZYCJA W TABLICY `entry.sets`, nie przenumerowanie
+ * po odfiltrowaniu — seria pominięta w środku zostawia DZIURĘ, którą szczegół
+ * czyta jako „nie zrobiono", a seria dołożona ponad `plannedSets` dostaje po
+ * prostu kolejny indeks; (3) `origin`/`substitutedExerciseId` przechodzą bez
+ * zmian — to one dają backendowi `SUBSTITUTED_EXERCISE_ALSO_LOGGED` (N14) za
+ * darmo, bo zamieniony wpis nigdy nie trafia do `entries` osobno (wymiana
+ * podmienia W MIEJSCU).
+ *
+ * Zakłada wpisy PO walidacji akcji: seria uznana tu za wypełnioną (`reps`
+ * niepuste i nie `skipped`) ma już mieć poprawny zakres i — gdy `tracksRpe` —
+ * wypełnioną trudność. Komunikaty o złym wpisaniu zostają w akcji, bo tam są
+ * nazwa ćwiczenia i numer serii potrzebne do zdania po polsku.
+ */
+export function buildLogPayload(entries: PayloadEntry[]): LogPayloadExercise[] {
+  const payload: LogPayloadExercise[] = [];
+  for (const entry of entries) {
+    const sets: SaveSetInput[] = [];
+    entry.sets.forEach((set, ordinal) => {
+      if (set.skipped || set.reps.trim() === "") return;
+      sets.push({
+        ordinal,
+        reps: Number(set.reps),
+        difficulty: entry.tracksRpe && set.difficulty !== "" ? Number(set.difficulty) : null,
+        videoFileId: set.videoFileId,
+      });
+    });
+    if (sets.length === 0) continue;
+    payload.push({
+      exerciseId: entry.exerciseId,
+      origin: entry.origin,
+      substitutedExerciseId: entry.substitutedExerciseId,
+      sets,
+    });
+  }
+  return payload;
 }
 
 /**
@@ -307,6 +401,13 @@ export interface SaveWorkoutLogOptions {
  * RAZEM z listą pobitych rekordów, więc `detectNewPRsForLog` zniknęło: rekordy
  * są częścią odpowiedzi `201`, nie osobnym zapytaniem po zapisie.
  *
+ * `origin`/`substitutedExerciseId` z `SaveExerciseLogInput` przechodzą do
+ * ciała BEZ WARUNKU, choć są opcjonalne — `JSON.stringify` (którym generowany
+ * klient serializuje ciało, `bodySerializer.gen.js`) gubi klucz o wartości
+ * `undefined` dokładnie tak samo, jak gdyby go nie było, więc wołający, który
+ * ich nie poda, wysyła to samo co dziś. To one dają backendowi
+ * `SUBSTITUTED_EXERCISE_ALSO_LOGGED` (N14) za darmo.
+ *
  * Co przestało być sprawą FE: własność i dostępność nagrań (`409
  * SET_VIDEO_UNAVAILABLE`, dawne `assertOwnedUnclaimedVideos`), przynależność
  * ćwiczeń do sesji (`409 EXERCISE_NOT_IN_SESSION`), reguły oceny trudności
@@ -331,6 +432,8 @@ export async function saveWorkoutLog(
         allDone: input.allDone,
         exercises: input.exercises.map((exercise) => ({
           exerciseId: exercise.exerciseId,
+          origin: exercise.origin,
+          substitutedExerciseId: exercise.substitutedExerciseId,
           sets: exercise.sets.map((set) => ({
             ordinal: set.ordinal,
             reps: set.reps,

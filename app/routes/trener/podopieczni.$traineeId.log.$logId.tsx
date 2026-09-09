@@ -1,4 +1,4 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { Icons } from "~/components/icons";
 import { VideoButton } from "~/components/video-modal";
 import { requireUser } from "~/lib/api/auth";
@@ -191,9 +191,13 @@ export default function TrenerWorkoutLogDetail() {
                   {String(eIdx + 1).padStart(2, "0")}
                 </div>
                 <div style={{ flex: 1 }}>
-                  <div className="row" style={{ gap: 10, alignItems: "center" }}>
+                  <div className="row" style={{ gap: 10, alignItems: "center", flexWrap: "wrap" }}>
                     <h3 style={{ fontSize: 15.5, margin: 0 }}>{ex.exerciseName}</h3>
                     <span className={`badge${ex.unit === "REPS" ? " active" : ""}`}>{ex.unit}</span>
+                    {ex.origin === "substitute" && (
+                      <span className="badge">zamiast: {ex.substitutedExerciseName}</span>
+                    )}
+                    {ex.origin === "extra" && <span className="badge">spoza planu</span>}
                   </div>
                 </div>
                 <div className="row" style={{ gap: 18 }}>

@@ -1,6 +1,6 @@
 import type { WorkoutLogExerciseView } from "@kalisthenos/api-client";
 import { useEffect, useRef } from "react";
-import { Link, useLoaderData, useSearchParams, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData, useSearchParams } from "react-router";
 import { Icons } from "~/components/icons";
 import { useToast } from "~/components/toast-provider";
 import { requireUser } from "~/lib/api/auth";
@@ -163,7 +163,13 @@ function ExerciseLogCard({
         }}
       >
         <div>
-          <span className="mono text-xs muted">#{String(index + 1).padStart(2, "0")}</span>
+          <div className="row" style={{ gap: 8, alignItems: "baseline", flexWrap: "wrap" }}>
+            <span className="mono text-xs muted">#{String(index + 1).padStart(2, "0")}</span>
+            {ex.origin === "substitute" && (
+              <span className="badge">zamiast: {ex.substitutedExerciseName}</span>
+            )}
+            {ex.origin === "extra" && <span className="badge">spoza planu</span>}
+          </div>
           <h3 style={{ margin: "2px 0 0" }}>{ex.exerciseName}</h3>
         </div>
         <div className="mono text-xs muted" style={{ textAlign: "right" }}>

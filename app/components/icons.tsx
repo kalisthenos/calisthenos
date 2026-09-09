@@ -83,6 +83,7 @@ export const Icons = {
   ),
   Chev: makeIcon(<path d="m9 6 6 6-6 6" />),
   ChevDown: makeIcon(<path d="m6 9 6 6 6-6" />),
+  ChevUp: makeIcon(<path d="m6 15 6-6 6 6" />),
   ChevLeft: makeIcon(<path d="m15 6-6 6 6 6" />),
   Upload: makeIcon(
     <>

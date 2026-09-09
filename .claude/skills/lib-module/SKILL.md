@@ -59,4 +59,9 @@ Tutaj podnosi się wersję i dostosowuje moduły. Procedura przekrojowa: `contra
 ## Domknięcie
 
 `npx vitest run <wzorzec>`, `npm run typecheck`, `npm run lint`, `npm run build`.
-Aktualizacja `app/lib/README.md`. Kończysz na `/finish` — **git prowadzi Właściciel**.
+Aktualizacja `app/lib/README.md`. Kończysz na `/finish`.
+
+**Git prowadzi agent** — od 2026-09-07, tą samą konwencją co w BE. Ale to drzewo **nie ma ani
+jednego hooka gita**, więc przed `git commit` uruchamiasz sam `npx tsc --noEmit` i `npx biome
+check <zmienione pliki>` — **po plikach, nie po `.`**, bo `check .` topi diff w ~260 błędach
+o zakończeniach linii (D-FE-1). **`npm install` i Docker nadal prowadzi Właściciel.**
