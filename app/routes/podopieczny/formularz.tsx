@@ -30,9 +30,8 @@ import { unitLabelPl } from "~/lib/progression-math";
 // kontraktem (`/v1/me/onboarding-form` jest na białej liście bramki BE — inaczej
 // nie dałoby się go pobrać).
 //
-// Do S6 stała tu jeszcze bramka płatnicza, sprawdzana w loaderze I w akcji, bo
-// na tę trasę można wejść wprost z adresu. Zniknęła razem ze Stripe'em
-// (ADR-0024 po stronie BE) — dziś jedyną bramką jest sam formularz.
+// Formularz jest tu JEDYNĄ bramką i tak zostaje: płatności wyszły z produktu
+// (ADR-0037 po stronie BE), więc nie ma drugiego warunku, który mógłby tu wrócić.
 // ============================================================
 
 export async function loader({ context }: LoaderFunctionArgs) {

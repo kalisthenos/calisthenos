@@ -13,8 +13,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // `baseUrl` — tego pola `MiddlewareDeps` celowo nie ma, patrz brief). Bez tego
 // mocka `getEnv()` parsowałoby prawdziwy `process.env`, którego testy nie
 // ustawiają, i każdy z czterech przypadków padałby na `ZodError` zanim
-// dotarłby do właściwej asercji. Ten sam wzorzec co w `files.test.ts` i
-// `stripe/webhook-verify.test.ts`.
+// dotarłby do właściwej asercji. Ten sam wzorzec co w `files.test.ts`.
 vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.test" }),
 }));

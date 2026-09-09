@@ -33,7 +33,7 @@ const UTWORZONE = {
 };
 
 describe("createInvite — zaproszenie przez kontrakt", () => {
-  it("to `POST /v1/invites` z ciałem: nazwa, e-mail, kwota i formularz — bez `trainerId`", async () => {
+  it("to `POST /v1/invites` z ciałem: nazwa, e-mail i formularz — bez `trainerId` i bez kwoty", async () => {
     // Trener wynika z tokenu. `trainerId` w ciele byłoby polem spoza DTO, czyli
     // `400` (forbidNonWhitelisted). Szablon formularza jedzie w TYM SAMYM
     // żądaniu — atomowość „zaproszenie + formularz" jest teraz sprawą BE.
@@ -62,9 +62,11 @@ describe("createInvite — zaproszenie przez kontrakt", () => {
     });
   });
 
-  it("bez formularza i bez kwoty oba pola jadą jako `null`, nie znikają", async () => {
-    // DTO dopuszcza `null` w obu; brak klucza i `null` znaczą to samo, ale jawny
+  it("bez formularza pole jedzie jako `null`, nie znika", async () => {
+    // DTO dopuszcza `null`; brak klucza i `null` znaczą to samo, ale jawny
     // `null` pilnuje, żeby trasa nie mogła podać `undefined` przez przeoczenie.
+    // Do ADR-0037 ten przypadek pilnował dwóch pól — `monthlyAmountGrosze`
+    // wyszło z kontraktu, `onboardingForm` zostało.
     let cialo: unknown;
     const api = klient(async (req) => {
       cialo = await req.json();

@@ -46,7 +46,9 @@ export interface CreateInviteInput {
  *
  * Ciało składane jawnie pole po polu: BE odrzuca pola spoza DTO, a `trainerId`
  * wynika z tokenu. Bez `replacesTraineeId` (odnowienie dostępu) — żadna trasa
- * FE dziś tego nie wystawia.
+ * FE dziś tego nie wystawia. Bez kwoty miesięcznej: `monthlyAmountGrosze` wyszło
+ * z kontraktu razem z płatnościami (ADR-0037 po stronie BE), a `forbidNonWhitelisted`
+ * sprawia, że dosłanie go dziś daje `400`, nie ciche zignorowanie.
  *
  * Wąsko, do modalu: `404` (ćwiczenie z szablonu spoza biblioteki albo
  * zarchiwizowane — BE sprawdza to PRZED wstawieniem czegokolwiek), `409`
