@@ -12,11 +12,14 @@ czego integrować — dane bierze z kontraktu BE. Ich rolę przejęły dwie rzec
   zakres tenanta, bramka formularza startowego (spec integracji §10).
 
 Katalog `tests/e2e/` (wskazywany przez `playwright.config.ts`, uruchamiany
-przez `npm run e2e`) niesie dziś pierwszy scenariusz: `sesja-poza-planem.spec.ts`
-— wymiana ćwiczenia W MIEJSCU i dodatek spoza planu, dowodzone na TREŚCI
-zapisanego logu, nie na samej obecności elementu na stronie. Napisany, jeszcze
-nieuruchomiony (Docker i stack prowadzi Właściciel) — to on ustala poniższe
-konwencje, obowiązujące każdy kolejny scenariusz:
+przez `npm run e2e`) niesie dziś jeden plik, `sesja-poza-planem.spec.ts`, a w nim
+dwa scenariusze: wymianę ćwiczenia W MIEJSCU z dodatkiem spoza planu oraz
+PRZESTAWIENIE ćwiczeń (2026-09-09) — oba dowodzone na TREŚCI zapisanego logu,
+nie na samej obecności elementu na stronie. Drugi scenariusz powtarza kroki
+logowania zamiast dzielić je `beforeEach`-em: przerobienie pierwszego wymagałoby
+przebiegu, żeby wiedzieć, że nadal przechodzi, a przebieg prowadzi Właściciel.
+Żaden z nich nie był jeszcze uruchomiony (Docker i stack prowadzi Właściciel) —
+to pierwszy plik ustala poniższe konwencje, obowiązujące każdy kolejny scenariusz:
 
 - **Konto** — dane demonstracyjne z `calisthenos-be` (`pnpm db:seed`):
   podopieczny `podopieczny1@kalisthenos.test` / hasło `Kalisthenos123!`
@@ -35,6 +38,11 @@ konwencje, obowiązujące każdy kolejny scenariusz:
   `.check()` na samym `<input>`** — `.diff-radio input`
   (`app/styles/tokens.css`) ma `opacity: 0; pointer-events: none`, więc klik
   zawsze musi trafić w widoczną etykietę obok.
+- **`eIdx` w identyfikatorach pól to POZYCJA wpisu w formularzu, nie ćwiczenie.**
+  Wymiana podmienia wpis W MIEJSCU, więc jej nie rusza — ale przestawienie
+  ćwiczeń owszem: po kliknięciu „wyżej" `#reps-0-0` należy już do innego
+  ćwiczenia niż przed nim. Scenariusz, który przestawia, musi liczyć indeksy od
+  kolejności PO przestawieniu.
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../CLAUDE.md`](../CLAUDE.md).

@@ -17,7 +17,7 @@ import type {
 import { orNull, publicFileUrl } from "~/lib/api/client";
 import type { Api } from "~/lib/api/client";
 import { ApiError } from "~/lib/api/errors";
-import type { DraftEntry, SetDraft } from "./log-draft";
+import type { PayloadEntry, SetDraft } from "./log-draft";
 
 // ============================================================
 // Domain types
@@ -28,9 +28,12 @@ import type { DraftEntry, SetDraft } from "./log-draft";
  * (`origin`) i własną liczbę serii, bo wymiana ćwiczenia podmienia wpis
  * W MIEJSCU, a dodatek spoza planu nie ma pozycji planu w ogóle. Nadzbiór
  * `DraftEntry` (`log-draft.ts`) — dokłada wyłącznie pola do RYSOWANIA karty
- * (`key`, `note`, `expectedReps`, `plannedSets`, `substitutedExerciseName`,
+ * (`note`, `expectedReps`, `plannedSets`, `substitutedExerciseName`,
  * `isDropsetItem`), więc `LogEntry[]` przechodzi bez rzutowania wszędzie,
- * gdzie kontrakt woła `DraftEntry[]` (`serializeDraft`, `buildLogPayload`).
+ * gdzie kontrakt woła `DraftEntry[]` (`serializeDraft`) albo `PayloadEntry[]`
+ * (`buildLogPayload`). `key` był na tej liście do v4 szkicu — od v5 wozi go
+ * sam `DraftEntry`, bo bez niego nie da się przywrócić szkicu o przestawionej
+ * kolejności.
  *
  * Zastąpił `LoggingEntry`, który odbijał plan i nie umiał wyrazić ani zamiany,
  * ani wpisu spoza planu. Stary kształt zniknął razem z `toLoggingEntries`
@@ -317,8 +320,14 @@ export interface LogPayloadExercise {
 }
 
 /**
- * Ciało `exercises` zapisu, budowane z WPISÓW (`DraftEntry`, więc też z jego
- * nadzbioru `LogEntry`) — dotąd 60 linii wewnątrz `try` akcji trasy. Trzy
+ * Ciało `exercises` zapisu, budowane z WPISÓW (`PayloadEntry`, czyli `DraftEntry`
+ * bez klucza — więc też z ich nadzbioru `LogEntry`) — dotąd 60 linii wewnątrz
+ * `try` akcji trasy.
+ *
+ * **Kolejność wpisów jest kolejnością WYKONANIA i przenosi ją sama tablica.**
+ * Ładunek nie ma osobnego pola na pozycję ćwiczenia i nie potrzebuje go: agregat
+ * BE nadaje `ordinal` z indeksu tablicy, a oba szczegóły logu oddają wpisy
+ * `order by ordinal`. Przestawianiem steruje `moveEntry` (`lib/log-draft`). Trzy
  * reguły: (1) wpis bez ani jednej wypełnionej serii wypada z ładunku
  * CAŁKOWICIE — inaczej poleciałoby `sets: []` za ćwiczenie, którego nikt nie
  * tknął; (2) `ordinal` to POZYCJA W TABLICY `entry.sets`, nie przenumerowanie
@@ -334,7 +343,7 @@ export interface LogPayloadExercise {
  * wypełnioną trudność. Komunikaty o złym wpisaniu zostają w akcji, bo tam są
  * nazwa ćwiczenia i numer serii potrzebne do zdania po polsku.
  */
-export function buildLogPayload(entries: DraftEntry[]): LogPayloadExercise[] {
+export function buildLogPayload(entries: PayloadEntry[]): LogPayloadExercise[] {
   const payload: LogPayloadExercise[] = [];
   for (const entry of entries) {
     const sets: SaveSetInput[] = [];

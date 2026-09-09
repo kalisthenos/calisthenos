@@ -49,6 +49,11 @@ const BLOKADA_ZDEJMOWANIA =
  *    intencji, nie przeoczenie: one z definicji wyrzucają serie tego wpisu, więc
  *    nagranie do niego robione i tak przestaje mieć adresata. „–" przeciwnie —
  *    zdejmuje JEDEN pusty wiersz ponad planem i nie mówi nic o pozostałych.
+ *
+ *    „wyżej"/„niżej" nie dostają jej z TRZECIEGO powodu, jeszcze innego niż oba
+ *    powyższe: przestawienie w ogóle nie przemontowuje karty. `entry.key` zostaje
+ *    ten sam, więc React przenosi jej poddrzewo — wysyłka leci dalej, więc nie ma
+ *    czego blokować.
  */
 export function LogExerciseCard({
   entry,
@@ -63,6 +68,8 @@ export function LogExerciseCard({
   onCopyFromFirst,
   onAddSet,
   onRemoveSet,
+  onMoveUp,
+  onMoveDown,
   onSwap,
   onUndoSwap,
   onRemoveEntry,
@@ -80,6 +87,8 @@ export function LogExerciseCard({
   onCopyFromFirst: () => void;
   onAddSet: () => void;
   onRemoveSet: (sIdx: number) => void;
+  onMoveUp: () => void;
+  onMoveDown: () => void;
   onSwap: () => void;
   onUndoSwap: () => void;
   onRemoveEntry: () => void;
@@ -160,6 +169,50 @@ export function LogExerciseCard({
           )}
         </div>
         <div className="row" style={{ gap: 6, flexShrink: 0, flexWrap: "wrap" }}>
+          {/* Kolejność WYKONANIA, nie planu — plan zostaje taki, jaki jest, a log
+              zapisuje to, co naprawdę się wydarzyło.
+
+              Bez blokady na czas wysyłki nagrania, w odróżnieniu od „–" (punkt 3
+              docblocka): przestawienie zachowuje `entry.key`, więc React PRZENOSI
+              poddrzewo karty zamiast je przemontować — `VideoUploadField` trzyma
+              swój stan, a trwająca wysyłka leci dalej. Ta różnica jest cała
+              w kluczu i psuje się po cichu, gdyby ktoś dołożył do niego indeks. */}
+          {/* `aria-disabled`, NIE `disabled`, i to jest różnica dla klawiatury:
+              przycisk zablokowany atrybutem `disabled` wypada z kolejności tabulacji,
+              więc dochodząc wpisem do krańca listy użytkownik traci na nim FOKUS —
+              przeglądarka odkłada go na `<body>`, czyli na początek strony. Tak
+              zablokowany zostaje w tabulacji i wygląda tak samo (`.btn[aria-disabled]`
+              w `tokens.css` maluje go razem z `:disabled`), a kliknięcie w niego jest
+              po prostu bezskuteczne: `moveEntry` poza zakresem oddaje tę samą tablicę.
+
+              Etykieta niesie POZYCJĘ, nie samą nazwę. Plan wolno ułożyć tak, że to
+              samo ćwiczenie stoi w dwóch blokach (blok `dropset` robi to rutynowo) —
+              wtedy dwa przyciski miałyby jedną nazwę dostępną, nierozróżnialną dla
+              czytnika ekranu. */}
+          {totalEntries > 1 && (
+            <>
+              <button
+                type="button"
+                onClick={onMoveUp}
+                aria-disabled={eIdx === 0}
+                className="btn btn-sm btn-ghost"
+                aria-label={`Przenieś ćwiczenie ${eIdx + 1} (${entry.exerciseName}) wyżej`}
+                title="To ćwiczenie zrobiłem wcześniej — przenieś wyżej"
+              >
+                <Icons.ChevUp />
+              </button>
+              <button
+                type="button"
+                onClick={onMoveDown}
+                aria-disabled={eIdx === totalEntries - 1}
+                className="btn btn-sm btn-ghost"
+                aria-label={`Przenieś ćwiczenie ${eIdx + 1} (${entry.exerciseName}) niżej`}
+                title="To ćwiczenie zrobiłem później — przenieś niżej"
+              >
+                <Icons.ChevDown />
+              </button>
+            </>
+          )}
           {showCopyButton && (
             <button
               type="button"

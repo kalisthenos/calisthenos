@@ -142,3 +142,88 @@ test("wymiana ćwiczenia i dodatek spoza planu trafiają do zapisanego logu z po
     await expect(sixthSetValue).toContainText("13");
   });
 });
+
+/**
+ * Kolejność WYKONANIA — drugi scenariusz tego pliku (2026-09-09).
+ *
+ * Kroki logowania i wejścia na sesję są tu POWTÓRZONE, nie wyciągnięte do
+ * `beforeEach` ani do funkcji pomocniczej, i jest to decyzja: przerobienie
+ * scenariusza wyżej wymagałoby przebiegu Playwrighta, żeby wiedzieć, że nadal
+ * przechodzi — a ten uruchamia Właściciel (`CLAUDE.md` drzewa FE). Powtórzenie
+ * dwunastu linii jest tańsze niż tknięcie jedynej działającej bramki widoku
+ * w tym drzewie. Pierwszy przebieg obu scenariuszy jest miejscem, w którym ta
+ * decyzja się odwraca.
+ *
+ * Dlaczego to jest jedyna bramka tej zmiany: przyciski „wyżej"/„niżej" są
+ * warstwą widoku, a to drzewo nie renderuje komponentów w testach
+ * (`@testing-library/react` nie jest jego zależnością). Czysta funkcja
+ * `moveEntry` ma test jednostkowy, akcja trasy ma swój — ale to, że KLIKNIĘCIE
+ * w ogóle dosięga tej funkcji i że przestawiona kolejność wraca z backendu,
+ * dowodzi wyłącznie ten scenariusz.
+ */
+test("przestawienie ćwiczeń zapisuje się jako kolejność WYKONANIA, nie kolejność planu", async ({
+  page,
+}) => {
+  await test.step("logowanie", async () => {
+    await page.goto("/login");
+    await page.getByLabel("Email").fill(TRAINEE_EMAIL);
+    await page.getByLabel("Hasło").fill(TRAINEE_PASSWORD);
+    await page.getByRole("button", { name: "Zaloguj" }).click();
+    await expect(page).toHaveURL(/\/podopieczny\/?$/);
+  });
+
+  await test.step("wejście na sesję Dzień górny", async () => {
+    await page.getByRole("link", { name: "Zarejestruj sesję" }).click();
+    await page.getByRole("link", { name: "Otwórz sesję Dzień górny" }).click();
+    await page.getByRole("link", { name: "Zarejestruj wykonanie", exact: true }).click();
+    await expect(page).toHaveURL(/\/podopieczny\/loguj\//);
+  });
+
+  await test.step("Pompki idą przed Podciąganie", async () => {
+    // Plan (seeder): 0 = Podciąganie nachwytem, 1 = Pompki klasyczne. Trening
+    // poszedł odwrotnie — i to jest cała treść tego scenariusza.
+    const cards = page.locator(".card.card-padless");
+    await expect(cards.first()).toContainText("Podciąganie nachwytem");
+
+    await page
+      .getByRole("button", { name: "Przenieś ćwiczenie 2 (Pompki klasyczne) wyżej" })
+      .click();
+
+    await expect(cards.first()).toContainText("Pompki klasyczne");
+    // Licznik pozycji idzie za listą, nie za planem — bez tego przestawienie
+    // byłoby widoczne wyłącznie w kolejności kart, a numer kłamałby obok niej.
+    await expect(cards.first().locator("span.mono").first()).toHaveText("Ćwiczenie 1/2");
+    // Kraniec listy gasi przycisk — `aria-disabled`, nie `disabled`, żeby nie
+    // wypadł z tabulacji i nie zabrał fokusu użytkownikowi klawiatury.
+    await expect(
+      cards.first().getByRole("button", { name: "Przenieś ćwiczenie 1 (Pompki klasyczne) wyżej" }),
+    ).toHaveAttribute("aria-disabled", "true");
+  });
+
+  await test.step("po jednej serii w każdym ćwiczeniu", async () => {
+    // Indeksy pól idą za POZYCJĄ w formularzu, więc po przestawieniu `0` to
+    // Pompki, a `1` — Podciąganie. Oba ćwiczenia zbierają ocenę wysiłku
+    // (`tracksRpe` domyślne w fabryce), więc samo `reps` odbiłaby akcja.
+    await page.locator("#reps-0-0").fill("20");
+    await page.locator('label[for="e_0_s_0_diff-6"]').click();
+
+    await page.locator("#reps-1-0").fill("9");
+    await page.locator('label[for="e_1_s_0_diff-7"]').click();
+  });
+
+  await test.step("zapis", async () => {
+    await page.getByRole("button", { name: "Zapisz sesję" }).click();
+    await expect(page).toHaveURL(/\/podopieczny\/historia\//);
+  });
+
+  await test.step("szczegół logu oddaje kolejność wykonania, nie planu", async () => {
+    // Dowód przechodzi przez CAŁĄ drogę: tablica `exercises` ładunku → `ordinal`
+    // nadany z jej indeksu przez agregat BE → `order by ordinal` w modelu
+    // odczytu. Gdyby którekolwiek ogniwo prostowało kolejność do planu, ta
+    // asercja stanęłaby na głowie, a zapis i tak by się powiódł.
+    const cards = page.locator(".card.card-padless");
+    await expect(cards).toHaveCount(2);
+    await expect(cards.nth(0).locator("h3")).toHaveText("Pompki klasyczne");
+    await expect(cards.nth(1).locator("h3")).toHaveText("Podciąganie nachwytem");
+  });
+});

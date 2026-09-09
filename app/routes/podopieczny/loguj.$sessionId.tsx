@@ -21,12 +21,13 @@ import type { PickableExercise } from "~/lib/exercises";
 import { maxUploadBytesFor } from "~/lib/file-uploads";
 import { type PlForms, pluralizePl, todayISO } from "~/lib/format";
 import {
-  type DraftEntry,
   type EntryDescriptor,
+  type PayloadEntry,
   type SetDraft,
   descriptorOf,
   draftHasContent,
   draftKey,
+  moveEntry,
   parseDraft,
   rehydrateEntries,
   serializeDraft,
@@ -156,7 +157,10 @@ export async function action(args: ActionFunctionArgs) {
   const descriptors: EntryDescriptor[] = descriptorsParse.data;
 
   try {
-    const logged: DraftEntry[] = [];
+    // `PayloadEntry`, nie `DraftEntry`: deskryptory ukrytego pola nie niosą klucza
+    // wpisu, bo akcja niczego po nim nie paruje — kolejność bierze z tablicy,
+    // a resztę z pól formularza.
+    const logged: PayloadEntry[] = [];
     // Zaczyna od prawdy i psuje się na PIERWSZYM pustym wierszu planowanym.
     // Wiersze ponad plan i całe wpisy `extra` nie mają jak go zepsuć — mogą
     // wyłącznie dołożyć wykonanie ponad to, o co prosił plan.
@@ -362,6 +366,9 @@ export default function LogForm() {
   const extraSeq = useRef(0);
 
   const planExerciseIds = useMemo(() => planEntries.map((e) => e.exerciseId), [planEntries]);
+  // Klucze pozycji planu W KOLEJNOŚCI PLANU — po nich `draftHasContent` poznaje,
+  // że podopieczny przestawił ćwiczenia, a nie tylko jeszcze nic nie wpisał.
+  const planKeys = useMemo(() => planEntries.map((e) => e.key), [planEntries]);
 
   // Które pola aktualnie wysyłają nagranie — zapis jest zablokowany, dopóki cokolwiek
   // leci, żeby trening nie zapisał się bez wideo, na które podopieczny właśnie czeka.
@@ -483,9 +490,17 @@ export default function LogForm() {
    *
    * Rozważane i ODRZUCONE: nadanie wierszom trwałej tożsamości, żeby remount był
    * niepotrzebny. Klucz musiałby zamieszkać w `SetDraft`, a ten jedzie do
-   * `sessionStorage` i do `buildLogPayload` — czyli podniesienie wersji szkicu
-   * i odrzucenie szkiców v4 u wszystkich, którzy właśnie ćwiczą. Nieproporcjonalne
-   * do jednego przycisku, który i tak jest do kliknięcia sekundę później.
+   * `sessionStorage` i do `buildLogPayload`.
+   *
+   * **Cena tego wariantu zmieniła się 2026-09-09 i argument trzeba było przepisać.**
+   * Brzmiał: „podniesienie wersji szkicu i odrzucenie szkiców u wszystkich, którzy
+   * właśnie ćwiczą". Wersja została podniesiona (v5, klucz WPISU dla przestawiania),
+   * a szkice poprzedniej wersji są dziś MIGROWANE, nie odrzucane (`parseDraft`) —
+   * więc bump nie kosztuje już cudzego treningu. Zostaje argument słabszy, ale
+   * wystarczający: `SetDraft` urósłby o pole, którego jedynym odbiorcą jest
+   * uniknięcie remountu jednego przycisku, i o własną ścieżkę migracji przy każdej
+   * kolejnej wersji. Nieproporcjonalne do przycisku, który i tak jest do kliknięcia
+   * sekundę później.
    */
   const removeSet = (key: string, sIdx: number) => {
     patchEntry(key, (entry) => {
@@ -577,6 +592,27 @@ export default function LogForm() {
   };
 
   /**
+   * Przestawia wpis o jedno miejsce. Kolejność wpisów jest kolejnością
+   * WYKONANIA i jedzie do backendu pozycją w tablicy `exercises` ładunku —
+   * osobnego pola na nią nie ma i nie potrzeba (`moveEntry`, `lib/log-draft`).
+   *
+   * Nagrań to NIE dotyka i dlatego nie woła `remountEntryVideoFields`:
+   * `entry.key` się nie zmienia, więc React przenosi poddrzewo karty zamiast je
+   * przemontować, a przemontowanie ubiłoby trwającą wysyłkę po cichu (ścieżka
+   * `ABORTED`). Przestawianie jest z tego powodu jedyną operacją tego ekranu,
+   * której nie trzeba blokować na czas wysyłki.
+   *
+   * `findIndex` oddaje -1, gdy wpis zniknął między renderem a kliknięciem —
+   * `moveEntry` oddaje wtedy tę samą tablicę, więc nie ma tu czego sprawdzać
+   * drugi raz.
+   */
+  const moveEntryBy = (key: string, delta: -1 | 1) =>
+    setEntries((prev) => {
+      const from = prev.findIndex((entry) => entry.key === key);
+      return moveEntry(prev, from, from + delta);
+    });
+
+  /**
    * Usuwa wpis — WYŁĄCZNIE spoza planu. Bez tego pomyłka w wybieraku jest nie do
    * cofnięcia bez przeładowania strony, czyli utraty całego formularza. Wpisu
    * z planu usunąć nie wolno: pominięcie ćwiczenia wyraża się pustymi seriami.
@@ -617,8 +653,9 @@ export default function LogForm() {
     try {
       const restored = parseDraft(sessionStorage.getItem(draftKey(session.id)), {
         planExerciseIds,
+        planKeys,
       });
-      if (restored && draftHasContent(restored)) {
+      if (restored && draftHasContent(restored, planKeys)) {
         setEntries(rehydrateEntries(planEntries, restored));
         setRestoredDraft(true);
         // Pola wideo czytają `initialFileId` tylko przy montowaniu, a tu jesteśmy już
@@ -638,7 +675,7 @@ export default function LogForm() {
   useEffect(() => {
     if (!draftReady) return;
     try {
-      if (draftHasContent(entries)) {
+      if (draftHasContent(entries, planKeys)) {
         sessionStorage.setItem(draftKey(session.id), serializeDraft(planExerciseIds, entries));
       } else {
         sessionStorage.removeItem(draftKey(session.id));
@@ -646,7 +683,7 @@ export default function LogForm() {
     } catch {
       // Best-effort — brak storage nie może wywrócić logowania.
     }
-  }, [draftReady, entries, session.id, planExerciseIds]);
+  }, [draftReady, entries, session.id, planExerciseIds, planKeys]);
 
   // Wraca do NIETKNIĘTEGO planu: znikają też wymiany i ćwiczenia spoza planu,
   // bo one też są treścią szkicu, a nie ozdobą nad nim.
@@ -796,6 +833,8 @@ export default function LogForm() {
               onVideoStateChange={(sIdx, state) => handleVideoState(entry.key, sIdx, state)}
               onAddSet={() => addSet(entry.key)}
               onRemoveSet={(sIdx) => removeSet(entry.key, sIdx)}
+              onMoveUp={() => moveEntryBy(entry.key, -1)}
+              onMoveDown={() => moveEntryBy(entry.key, 1)}
               onSwap={() => setPicker({ mode: "swap", key: entry.key })}
               onUndoSwap={() => undoSwap(entry.key)}
               onRemoveEntry={() => removeEntry(entry.key)}

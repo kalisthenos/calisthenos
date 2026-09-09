@@ -391,6 +391,26 @@ describe("loguj/:sessionId — akcja pilnuje kształtu ładunku", () => {
     });
   });
 
+  it("kolejność ćwiczeń w ciele idzie ZA deskryptorami, nie za planem", async () => {
+    // Kolejność wpisów JEST kolejnością wykonania, a backend nie ma na nią
+    // osobnego pola: agregat nadaje `ordinal` z INDEKSU tablicy `exercises`,
+    // a oba szczegóły logu oddają wpisy `order by ordinal`. Przestawienie kart
+    // (`moveEntry`) zmienia więc wyłącznie kolejność deskryptorów — i albo
+    // dojedzie tędy do ciała, albo zniknie BEZ ŚLADU: zapis powiedzie się tak
+    // samo, tylko log skłamie o przebiegu treningu.
+    const wynik = await wykonaj(
+      formularz(
+        [
+          deskryptor({ exerciseId: "e-2", exerciseName: "Dip", plannedSets: 1, setCount: 1 }),
+          deskryptor({ plannedSets: 1, setCount: 1 }),
+        ],
+        { e_0_s_0_reps: "10", e_1_s_0_reps: "8" },
+      ),
+    );
+
+    expect(cwiczeniaZapisu(wynik).map((c) => c.exerciseId)).toEqual(["e-2", "e-1"]);
+  });
+
   it("ukryte pole, które nie jest JSON-em, odrzuca zapis zamiast go przepuścić", async () => {
     // Ukryte pole jest wejściem NIEZAUFANYM tak samo jak ciało żądania. Bez tego
     // sprawdzenia śmieć w `entries` dawałby po prostu zero wpisów, czyli zapis
