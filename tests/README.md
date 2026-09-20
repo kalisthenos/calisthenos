@@ -12,7 +12,7 @@ czego integrować — dane bierze z kontraktu BE. Ich rolę przejęły dwie rzec
   zakres tenanta, bramka formularza startowego (spec integracji §10).
 
 Katalog `tests/e2e/` (wskazywany przez `playwright.config.ts`, uruchamiany
-przez `npm run e2e`) niesie dziś jeden plik, `sesja-poza-planem.spec.ts`, a w nim
+przez `npm run e2e`) niesie dziś dwa pliki. `sesja-poza-planem.spec.ts` ma
 dwa scenariusze: wymianę ćwiczenia W MIEJSCU z dodatkiem spoza planu oraz
 PRZESTAWIENIE ćwiczeń (2026-09-09) — oba dowodzone na TREŚCI zapisanego logu,
 nie na samej obecności elementu na stronie. Drugi scenariusz powtarza kroki
@@ -43,6 +43,21 @@ to pierwszy plik ustala poniższe konwencje, obowiązujące każdy kolejny scena
   ćwiczeń owszem: po kliknięciu „wyżej" `#reps-0-0` należy już do innego
   ćwiczenia niż przed nim. Scenariusz, który przestawia, musi liczyć indeksy od
   kolejności PO przestawieniu.
+- **`page.goto` na adres STATYCZNY jest dozwolony** — reguła „klikiem, nie
+  zgadywanym URL-em" chroni przed identyfikatorami losowanymi w bazie (sesja,
+  log), nie przed nawigacją na segment znany z góry. Doszło przy
+  `notatki-ai.spec.ts` (Zadanie 17), bo ekran, który testuje, nie ma jeszcze
+  wejścia z menu trenera.
+
+`notatki-ai.spec.ts` (Zadanie 17) dowodzi jednej gałęzi włącznika notatek AI —
+trenera BEZ podłączonego kalendarza (jedyny stan, jaki gwarantuje seeder: nie
+zakłada wiersza `calendar_connections`). Gałąź „kalendarz podłączony → włączenie
+działa" wymagałaby prawdziwej zgody Google, do której to repozytorium nie ma
+konta testowego — i której backend celowo nie da się tu podstawić (`calendar-
+port.ts` w `apps/api-e2e` rzuca na każde wywołanie sieciowe zamiast cicho
+przepuszczać). Pełne uzasadnienie i to, gdzie ta gałąź POWINNA dostać dowód
+(test trasy przeciw podstawionemu klientowi, wzorem `integracje.google.test.tsx`,
+którego `integracje.notatki-ai.tsx` dziś nie ma) — w docblocku tego pliku.
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../CLAUDE.md`](../CLAUDE.md).
