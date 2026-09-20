@@ -73,6 +73,14 @@ const SZCZEGOL: ConsultationDetail = {
   actionItems: [
     { id: "i-1", ordinal: 0, body: "Więcej mobilności", status: "open", resolvedAt: null },
   ],
+  // Notatka AI (klient 0.7.0) — oba pola są w kontrakcie WYMAGANE, więc ta
+  // fikstura musi je nieść, choć żaden test w tym pliku ich nie dotyczy.
+  // `disabled`, nie `no-meeting-url`: ta fikstura nie mówi nic o integracji
+  // notetakera, a `disabled` jest jedynym stanem, który znaczy dokładnie to.
+  // `no-meeting-url` twierdziłoby, że integracja JEST włączona i brakuje tylko
+  // odnośnika — a `TERMIN` wyżej ma `meetingUrl: null` przypadkiem, nie po to.
+  aiNotes: null,
+  aiNotesState: "disabled",
 };
 
 describe("czas — moment BE ↔ czas ścienny FE", () => {
