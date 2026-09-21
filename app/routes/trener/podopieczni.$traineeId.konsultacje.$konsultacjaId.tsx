@@ -161,13 +161,11 @@ export default function TrenerKonsultacjaDetail() {
           <Form method="post">
             <input type="hidden" name="intent" value="document" />
             <ConsultationForm
+              tryb="dokumentacja"
               defaultValue={{
                 scheduledAt: toLocalInput(c.scheduledAt),
                 durationMin: c.durationMin,
                 meetingUrl: c.meetingUrl,
-                // `periodFrom`/`periodTo` nie idą: kontrakt ich nie niesie
-                // (kolumny są spadkiem po legacy, `docs/04` o nich milczy).
-                title,
                 summary: c.summary ?? "",
                 items: items.map((it) => ({ body: it.body, status: it.status })),
               }}

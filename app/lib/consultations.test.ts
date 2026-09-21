@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
-import type { ConsultationDocForm } from "./consultation-types";
+import type { AdhocConsultationForm, ConsultationDocForm } from "./consultation-types";
 import {
   type ConsultationDetail,
   ConsultationError,
@@ -295,18 +295,26 @@ describe("getConsultationDetail — szczegół terminu", () => {
   });
 });
 
+/**
+ * Dokumentacja niesie DOKŁADNIE to, co przyjmuje `POST …/document` — od
+ * 2026-09-21 (D-FE-5) nie ma tu już terminu, czasu trwania, odnośnika, tytułu
+ * ani okresu. Pięć pól, które formularz zbierał, Zod walidował, a moduł
+ * wyrzucał przed wysyłką.
+ */
 const FORMULARZ: ConsultationDocForm = {
-  scheduledAt: "2026-07-10T18:00",
-  durationMin: 45,
-  meetingUrl: null,
-  title: "Konsultacja miesięczna",
   summary: "Notatki",
-  periodFrom: "2026-06-01",
-  periodTo: "2026-06-30",
   items: [
     { body: "A", status: "open" },
     { body: "B", status: "resolved" },
   ],
+};
+
+/** Termin poza serią przyjmuje więcej — stąd osobny kształt. */
+const FORMULARZ_NOWY: AdhocConsultationForm = {
+  ...FORMULARZ,
+  scheduledAt: "2026-07-10T18:00",
+  durationMin: 45,
+  meetingUrl: null,
 };
 
 describe("createAdhocConsultation — termin poza serią", () => {
@@ -325,7 +333,7 @@ describe("createAdhocConsultation — termin poza serią", () => {
 
     const id = await createAdhocConsultation(api, {
       traineeId: "t-1",
-      form: FORMULARZ,
+      form: FORMULARZ_NOWY,
       documented: false,
     });
 
@@ -348,7 +356,11 @@ describe("createAdhocConsultation — termin poza serią", () => {
       return json(201, SZCZEGOL);
     });
 
-    await createAdhocConsultation(api, { traineeId: "t-1", form: FORMULARZ, documented: true });
+    await createAdhocConsultation(api, {
+      traineeId: "t-1",
+      form: FORMULARZ_NOWY,
+      documented: true,
+    });
 
     expect(cialo).toEqual({
       traineeId: "t-1",
@@ -364,7 +376,7 @@ describe("createAdhocConsultation — termin poza serią", () => {
   it("`404` (cudzy podopieczny) idzie do formularza jako ConsultationError, `500` leci jako ApiError", async () => {
     const cudzy = klient(() => odmowa(404, "RESOURCE_NOT_FOUND", "Nie znaleziono podopiecznego."));
     const awaria = klient(() => odmowa(500, "INTERNAL", "Coś poszło nie tak."));
-    const wejscie = { traineeId: "t-x", form: FORMULARZ, documented: false };
+    const wejscie = { traineeId: "t-x", form: FORMULARZ_NOWY, documented: false };
 
     const odmowaPary = await createAdhocConsultation(cudzy, wejscie).catch((e) => e);
     const bladAwarii = await createAdhocConsultation(awaria, wejscie).catch((e) => e);

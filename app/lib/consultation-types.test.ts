@@ -1,5 +1,9 @@
 import { describe, expect, it } from "vitest";
-import { ConsultationDocFormSchema, ScheduleFormSchema } from "~/lib/consultation-types";
+import {
+  AdhocConsultationFormSchema,
+  ConsultationDocFormSchema,
+  ScheduleFormSchema,
+} from "~/lib/consultation-types";
 
 describe("ScheduleFormSchema", () => {
   const weekly = {
@@ -45,32 +49,58 @@ describe("ScheduleFormSchema", () => {
 
 describe("ConsultationDocFormSchema", () => {
   const base = {
-    scheduledAt: "2026-06-11T18:00",
-    durationMin: 45,
-    title: "Czerwiec",
     summary: "OK",
     items: [{ body: "Łokcie", status: "open" as const }],
   };
+
   it("akceptuje poprawny wpis", () => {
     expect(ConsultationDocFormSchema.safeParse(base).success).toBe(true);
   });
-  it("odrzuca pusty tytuł i pustą treść punktu", () => {
-    expect(ConsultationDocFormSchema.safeParse({ ...base, title: "  " }).success).toBe(false);
+
+  it("odrzuca pustą treść punktu", () => {
     expect(
       ConsultationDocFormSchema.safeParse({ ...base, items: [{ body: " ", status: "open" }] })
         .success,
     ).toBe(false);
   });
-  it("waliduje okres oba-albo-żaden + from<=to", () => {
-    expect(ConsultationDocFormSchema.safeParse({ ...base, periodFrom: "2026-06-01" }).success).toBe(
+
+  /**
+   * D-FE-5. Dokumentacja niesie DOKŁADNIE to, co przyjmuje `POST …/document`.
+   * Pięć pól, które ten schemat zbierał do 2026-09-21 — termin, czas trwania,
+   * odnośnik, tytuł i okres — nie było wysyłane nigdy; formularz je pokazywał,
+   * Zod walidował, a moduł wyrzucał przed żądaniem.
+   */
+  it("nie zbiera już pól, których ta operacja nie wysyła", () => {
+    expect(Object.keys(ConsultationDocFormSchema.shape).sort()).toEqual(["items", "summary"]);
+  });
+
+  it("termin poza serią ma własny, SZERSZY schemat", () => {
+    // Druga strona granicy: tam te pola są żywe, bo `POST /v1/consultations`
+    // je przyjmuje. Bez tej asercji rozdzielenie schematów wyglądałoby jak
+    // zwykłe skasowanie pól.
+    const klucze = Object.keys(AdhocConsultationFormSchema.shape).sort();
+    expect(klucze).toContain("scheduledAt");
+    expect(klucze).toContain("durationMin");
+    expect(klucze).toContain("meetingUrl");
+    expect(
+      AdhocConsultationFormSchema.safeParse({
+        ...base,
+        scheduledAt: "2026-06-11T18:00",
+        durationMin: 45,
+      }).success,
+    ).toBe(true);
+  });
+
+  it("czas trwania trzyma się granic DTO backendu (5–480)", () => {
+    const zScheduled = { ...base, scheduledAt: "2026-06-11T18:00" };
+    expect(AdhocConsultationFormSchema.safeParse({ ...zScheduled, durationMin: 4 }).success).toBe(
       false,
     );
-    expect(
-      ConsultationDocFormSchema.safeParse({
-        ...base,
-        periodFrom: "2026-06-10",
-        periodTo: "2026-06-01",
-      }).success,
-    ).toBe(false);
+    expect(AdhocConsultationFormSchema.safeParse({ ...zScheduled, durationMin: 481 }).success).toBe(
+      false,
+    );
+    expect(AdhocConsultationFormSchema.safeParse({ ...zScheduled, durationMin: 5 }).success).toBe(
+      true,
+    );
   });
 });

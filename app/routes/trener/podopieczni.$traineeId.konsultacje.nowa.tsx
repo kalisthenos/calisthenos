@@ -11,7 +11,7 @@ import { ConsultationForm } from "~/components/consultation-form";
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { parseConsultationDocFormData } from "~/lib/consultation-form.server";
-import { ConsultationDocFormSchema } from "~/lib/consultation-types";
+import { AdhocConsultationFormSchema } from "~/lib/consultation-types";
 import { ConsultationError, createAdhocConsultation } from "~/lib/consultations";
 import { todayISO } from "~/lib/format";
 import { findTraineeRef } from "~/lib/trainees";
@@ -32,7 +32,7 @@ export async function action(args: ActionFunctionArgs) {
   const traineeId = args.params.traineeId ?? "";
   const fd = await args.request.formData();
   const documented = fd.get("intent") === "save-documented";
-  const parsed = ConsultationDocFormSchema.safeParse(parseConsultationDocFormData(fd));
+  const parsed = AdhocConsultationFormSchema.safeParse(parseConsultationDocFormData(fd));
   if (!parsed.success) {
     return { error: parsed.error.issues[0]?.message ?? "Niepoprawne dane." };
   }

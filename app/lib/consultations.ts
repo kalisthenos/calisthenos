@@ -19,7 +19,11 @@ import type {
 import { orNull } from "~/lib/api/client";
 import type { Api } from "~/lib/api/client";
 import { ApiError } from "~/lib/api/errors";
-import type { ConsultationDocForm, TraineeAction } from "~/lib/consultation-types";
+import type {
+  AdhocConsultationForm,
+  ConsultationDocForm,
+  TraineeAction,
+} from "~/lib/consultation-types";
 import { APP_TIME_ZONE } from "~/lib/format";
 
 /**
@@ -333,7 +337,12 @@ function toConsultationError(e: unknown): never {
 
 export interface CreateAdhocConsultationInput {
   traineeId: string;
-  form: ConsultationDocForm;
+  /**
+   * Szerszy kształt niż dokumentacja — `POST /v1/consultations` przyjmuje też
+   * termin, czas trwania i odnośnik. Rozdzielone 2026-09-21 (D-FE-5): jeden
+   * schemat na dwie operacje zbierał pola, których druga z nich nie wysyła.
+   */
+  form: AdhocConsultationForm;
   documented: boolean;
 }
 
