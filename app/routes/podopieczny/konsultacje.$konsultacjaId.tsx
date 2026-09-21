@@ -12,7 +12,7 @@ import { TraineeOccurrenceActions } from "~/components/trainee-occurrence-action
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { defaultTitle } from "~/lib/consultation-schedules";
-import { consultationPresentation } from "~/lib/consultation-status";
+import { presentationFor } from "~/lib/consultation-status";
 import { TraineeActionSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
@@ -57,13 +57,7 @@ export default function TraineeKonsultacjaDetail() {
   const items = c.actionItems;
   const title = defaultTitle(c.scheduledAt);
 
-  const meta = consultationPresentation({
-    status: c.status,
-    scheduledAtISO: c.scheduledAt,
-    // Czas ścienny, nie moment — `scheduledAt` jest w tej samej konwencji (D-FE-3).
-    nowMs: appWallClockNow(),
-    viewer: "trainee",
-  });
+  const meta = presentationFor(c.presentation);
   // Z listy akcji BE, nie ze statusu — tabela przejść należy do kontraktu.
   const canAct = canTraineeRespond(c);
   const openCount = items.filter((it) => it.status === "open").length;

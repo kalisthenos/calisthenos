@@ -15,7 +15,7 @@ import { TraineeOccurrenceActions } from "~/components/trainee-occurrence-action
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { defaultTitle } from "~/lib/consultation-schedules";
-import { consultationPresentation, mostUrgentTone } from "~/lib/consultation-status";
+import { mostUrgentTone, presentationFor } from "~/lib/consultation-status";
 import { TraineeActionSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
@@ -82,17 +82,7 @@ export default function PodopiecznyKonsultacjeKalendarz() {
   // Podsumowanie per dzień (kolor kropki = najważniejszy ton).
   const days = new Map<number, DaySummary>();
   for (const [day, occs] of byDay) {
-    const tone = mostUrgentTone(
-      occs.map(
-        (o) =>
-          consultationPresentation({
-            status: o.status,
-            scheduledAtISO: o.scheduledAt,
-            nowMs: now,
-            viewer: "trainee",
-          }).tone,
-      ),
-    );
+    const tone = mostUrgentTone(occs.map((o) => presentationFor(o.presentation).tone));
     if (tone) days.set(day, { tone, count: occs.length });
   }
 
@@ -108,14 +98,7 @@ export default function PodopiecznyKonsultacjeKalendarz() {
     .sort((a, b) => new Date(b.scheduledAt).getTime() - new Date(a.scheduledAt).getTime());
 
   const selectedOccs = selected != null ? (byDay.get(selected) ?? []) : [];
-  const nextMeta = next
-    ? consultationPresentation({
-        status: next.status,
-        scheduledAtISO: next.scheduledAt,
-        nowMs: now,
-        viewer: "trainee",
-      })
-    : null;
+  const nextMeta = next ? presentationFor(next.presentation) : null;
   // Z listy akcji BE, nie ze statusu — tabela przejść należy do kontraktu.
   const nextCanAct = next != null && canTraineeRespond(next);
 
@@ -225,12 +208,7 @@ export default function PodopiecznyKonsultacjeKalendarz() {
             ) : (
               <div className="list">
                 {upcoming.map((o) => {
-                  const meta = consultationPresentation({
-                    status: o.status,
-                    scheduledAtISO: o.scheduledAt,
-                    nowMs: now,
-                    viewer: "trainee",
-                  });
+                  const meta = presentationFor(o.presentation);
                   return (
                     <ConsultationRow
                       key={o.id}
@@ -251,12 +229,7 @@ export default function PodopiecznyKonsultacjeKalendarz() {
                 <h2 style={{ fontSize: 17, margin: "28px 0 12px" }}>Minione</h2>
                 <div className="list">
                   {past.map((o) => {
-                    const meta = consultationPresentation({
-                      status: o.status,
-                      scheduledAtISO: o.scheduledAt,
-                      nowMs: now,
-                      viewer: "trainee",
-                    });
+                    const meta = presentationFor(o.presentation);
                     return (
                       <ConsultationRow
                         key={o.id}
@@ -280,12 +253,7 @@ export default function PodopiecznyKonsultacjeKalendarz() {
 }
 
 function DayOccurrenceCard({ occ, now }: { occ: ConsultationView; now: number }) {
-  const meta = consultationPresentation({
-    status: occ.status,
-    scheduledAtISO: occ.scheduledAt,
-    nowMs: now,
-    viewer: "trainee",
-  });
+  const meta = presentationFor(occ.presentation);
   const canAct = canTraineeRespond(occ);
 
   return (

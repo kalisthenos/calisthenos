@@ -79,15 +79,15 @@ export type ConsultationDocForm = z.infer<typeof ConsultationDocFormSchema>;
 export const TraineeActionSchema = z.enum(["confirm", "decline", "request_change"]);
 export type TraineeAction = z.infer<typeof TraineeActionSchema>;
 
-// ---------------- Czyste guardy przejść (TDD) ----------------
-
-export function canTraineeAct(status: ConsultationStatus, _action: TraineeAction): boolean {
-  return status === "planned" || status === "confirmed";
-}
-export function canTrainerReschedule(status: ConsultationStatus): boolean {
-  return status === "planned" || status === "confirmed" || status === "change_requested";
-}
-export const canTrainerCancel = canTrainerReschedule;
-export function canDocument(status: ConsultationStatus): boolean {
-  return status !== "cancelled";
-}
+// ---------------- Tabela przejść: NIE MA JEJ TUTAJ ----------------
+//
+// Do 2026-09-21 stały tu cztery gwardie — `canTraineeAct`,
+// `canTrainerReschedule`, `canTrainerCancel` i `canDocument` — czyli druga
+// kopia tabeli przejść, po tej stronie szwu. Nie wołało ich już nic, ale miały
+// własne testy, więc wyglądały na żywe i zapraszały do użycia; przy tym
+// **każda z nich dopuszczała WIĘCEJ niż backend** (D-FE-4).
+//
+// Tabela przejść należy do kontraktu i przychodzi przy każdym terminie jako
+// `allowedActions`. Jeśli szukasz tu odpowiedzi „czy wolno przełożyć" —
+// odpowiedź jest w `termin.allowedActions`, a nie w funkcji, którą trzeba
+// pamiętać, żeby zaktualizować.

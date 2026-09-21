@@ -3,7 +3,7 @@ import { type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { ConsultationRow } from "~/components/consultation-row";
 import { type DaySummary, MonthCalendar } from "~/components/month-calendar";
 import { requireUser } from "~/lib/api/auth";
-import { consultationPresentation, mostUrgentTone } from "~/lib/consultation-status";
+import { mostUrgentTone, presentationFor } from "~/lib/consultation-status";
 import {
   type ConsultationView,
   appWallClockNow,
@@ -40,15 +40,7 @@ export default function TrenerKonsultacjeKalendarz() {
   // Podsumowanie per dzień dla kalendarza (kolor = najważniejszy ton).
   const days = new Map<number, DaySummary>();
   for (const [day, occs] of byDay) {
-    const tones = occs.map(
-      (o) =>
-        consultationPresentation({
-          status: o.status,
-          scheduledAtISO: o.scheduledAt,
-          nowMs: now,
-          viewer: "trainer",
-        }).tone,
-    );
+    const tones = occs.map((o) => presentationFor(o.presentation).tone);
     const tone = mostUrgentTone(tones);
     if (tone) days.set(day, { tone, count: occs.length });
   }
@@ -88,12 +80,7 @@ export default function TrenerKonsultacjeKalendarz() {
           {selectedOccs.length > 0 ? (
             <div className="list">
               {selectedOccs.map((o) => {
-                const meta = consultationPresentation({
-                  status: o.status,
-                  scheduledAtISO: o.scheduledAt,
-                  nowMs: now,
-                  viewer: "trainer",
-                });
+                const meta = presentationFor(o.presentation);
                 return (
                   <ConsultationRow
                     key={o.id}

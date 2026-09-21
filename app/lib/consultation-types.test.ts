@@ -1,11 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  ConsultationDocFormSchema,
-  ScheduleFormSchema,
-  canDocument,
-  canTraineeAct,
-  canTrainerReschedule,
-} from "~/lib/consultation-types";
+import { ConsultationDocFormSchema, ScheduleFormSchema } from "~/lib/consultation-types";
 
 describe("ScheduleFormSchema", () => {
   const weekly = {
@@ -78,25 +72,5 @@ describe("ConsultationDocFormSchema", () => {
         periodTo: "2026-06-01",
       }).success,
     ).toBe(false);
-  });
-});
-
-describe("guardy przejść statusów", () => {
-  it("podopieczny działa tylko na planned/confirmed", () => {
-    expect(canTraineeAct("planned", "confirm")).toBe(true);
-    expect(canTraineeAct("confirmed", "request_change")).toBe(true);
-    expect(canTraineeAct("cancelled", "confirm")).toBe(false);
-    expect(canTraineeAct("documented", "decline")).toBe(false);
-  });
-  it("trener przekłada/odwołuje tylko żywe terminy", () => {
-    expect(canTrainerReschedule("planned")).toBe(true);
-    expect(canTrainerReschedule("change_requested")).toBe(true);
-    expect(canTrainerReschedule("cancelled")).toBe(false);
-    expect(canTrainerReschedule("documented")).toBe(false);
-  });
-  it("dokumentować można wszystko poza cancelled", () => {
-    expect(canDocument("confirmed")).toBe(true);
-    expect(canDocument("planned")).toBe(true);
-    expect(canDocument("cancelled")).toBe(false);
   });
 });

@@ -23,7 +23,7 @@ import {
   getActiveSchedule,
   upsertSchedule,
 } from "~/lib/consultation-schedules";
-import { consultationPresentation } from "~/lib/consultation-status";
+import { presentationFor } from "~/lib/consultation-status";
 import { ScheduleFormSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
@@ -139,12 +139,7 @@ export default function TrenerKonsultacjeIndex() {
     return (
       <div className="list">
         {items.map((o) => {
-          const meta = consultationPresentation({
-            status: o.status,
-            scheduledAtISO: o.scheduledAt,
-            nowMs: now,
-            viewer: "trainer",
-          });
+          const meta = presentationFor(o.presentation);
           return (
             <ConsultationRow
               key={o.id}
