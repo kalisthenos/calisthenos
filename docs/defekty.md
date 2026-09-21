@@ -72,8 +72,15 @@ drzewa i nie jest czymś, co agent robi przy okazji innego zadania.
 
 ## D-FE-2 · Trzeci stan połączenia z kalendarzem nie dociera do ekranu integracji
 
-**Kontekst:** konsultacje / kalendarz zewnętrzny · **Status:** otwarty · **Zgłoszony:** 2026-09-21,
-rozpoznaniem modułu konsultacji
+**Kontekst:** konsultacje / kalendarz zewnętrzny · **Status:** ✅ **naprawiony** 2026-09-21 ·
+**Zgłoszony:** 2026-09-21, rozpoznaniem modułu konsultacji
+
+**Co go zamknęło.** `calendarConnectionCopy` w `app/lib/calendar.ts` — trzy stany kontraktu
+dają trzy różne ekrany, a `broken` niesie ostrzeżenie i **obie** drogi wyjścia naraz (ponowna
+zgoda i rozłączenie), bo kontrakt nie rozróżnia `auth-permanent` od `gone`. Reguła wyprowadzona
+do modułu, nie zostawiona w trasie, bo testy tej trasy sprawdzają loader i akcję, nie widok —
+cztery przypadki w `app/lib/calendar.test.ts`, w tym regresja wprost na dawną regułę
+`status !== "disconnected"`.
 
 **Objaw.** Trener z połączeniem ostemplowanym jako **zepsute** widzi na ekranie integracji
 „Połączone konto: jan@…" i przycisk „Rozłącz". Nic się nie synchronizuje, a ekran mówi
@@ -120,8 +127,15 @@ nigdy; połączenie ląduje w `broken` przy pierwszym wypchnięciu.
 
 ## D-FE-3 · Granica „minione / nadchodzące" jest przesunięta o offset strefy
 
-**Kontekst:** konsultacje · **Status:** otwarty · **Zgłoszony:** 2026-09-21, rozpoznaniem modułu
-konsultacji
+**Kontekst:** konsultacje · **Status:** ✅ **naprawiony** 2026-09-21 · **Zgłoszony:** 2026-09-21,
+rozpoznaniem modułu konsultacji
+
+**Co go zamknęło.** `appWallClockNow()` w `app/lib/consultations.ts` — module, który tę konwencję
+ustanawia — i pięć miejsc wywołania przestawionych na nią. `consultationPresentation` została bez
+zmian: nigdy nie była zepsuta, myliły się jej wołające. Bramki na tę klasę **nie było**; dołożona
+jako `app/routes/no-raw-now.test.ts` wzorem `no-direct-api.test.ts` i sprawdzona na prawdziwym
+kodzie z `HEAD` — wszystkie pięć tras przed poprawką ją zapala. Zakres ślepoty (`new
+Date().getTime()`, pomyłka odwrotna, komponenty spoza `app/routes/`) zapisany w jej docblocku.
 
 **Objaw.** Spotkanie, które zaczęło się półtorej godziny temu, siedzi latem w sekcji
 **„Nadchodzące"** u podopiecznego. U trenera etykieta „do udokumentowania" zapala się z tym samym
