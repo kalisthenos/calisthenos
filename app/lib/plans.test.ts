@@ -3,6 +3,7 @@ import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import type { PlanForm } from "./plan-types";
 import {
+  PlanError,
   createBlankPlan,
   createDraftFromActive,
   deletePlan,
@@ -10,7 +11,6 @@ import {
   listPlansForTrainee,
   listPlansForTrainer,
   loadPlanForTrainer,
-  PlanError,
   planDeleteOutcomeMessage,
   publishPlan,
   saveDraftPlan,

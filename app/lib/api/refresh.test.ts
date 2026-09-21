@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from "vitest";
+import { graceWindowSize, refreshOnce, resetRefreshState } from "./refresh";
 import type { ApiTokens } from "./session";
-import { refreshOnce, resetRefreshState, graceWindowSize } from "./refresh";
 
 const TERAZ = new Date("2026-08-31T10:00:00Z");
 

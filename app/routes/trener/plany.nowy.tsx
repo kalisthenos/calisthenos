@@ -1,19 +1,19 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
   useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { z } from "zod";
 import { requireUser } from "~/lib/api/auth";
 import {
-  createBlankPlan,
   type CreatePlanResult,
-  findDraftForTrainee,
   PlanError,
+  createBlankPlan,
+  findDraftForTrainee,
 } from "~/lib/plans";
 import { listTraineesOfTrainer } from "~/lib/trainees";
 

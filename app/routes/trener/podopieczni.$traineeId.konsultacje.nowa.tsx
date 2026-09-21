@@ -1,7 +1,7 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
-  type ActionFunctionArgs,
   type LoaderFunctionArgs,
   redirect,
   useActionData,
@@ -9,9 +9,9 @@ import {
 } from "react-router";
 import { ConsultationForm } from "~/components/consultation-form";
 import { requireUser } from "~/lib/api/auth";
+import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { parseConsultationDocFormData } from "~/lib/consultation-form.server";
 import { ConsultationDocFormSchema } from "~/lib/consultation-types";
-import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { ConsultationError, createAdhocConsultation } from "~/lib/consultations";
 import { todayISO } from "~/lib/format";
 import { findTraineeRef } from "~/lib/trainees";

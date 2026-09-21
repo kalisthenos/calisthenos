@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
 import {
-  buildPyramid,
-  layoutPyramid,
-  orderAndPlace,
-  VIEW_W,
   type PyramidLayout,
   type PyramidMetrics,
   type PyramidNodeInput,
+  VIEW_W,
+  buildPyramid,
+  layoutPyramid,
+  orderAndPlace,
 } from "./skill-pyramid";
-import { edgePathD, routeEdges, type Pt } from "./skill-pyramid-routing";
+import { type Pt, edgePathD, routeEdges } from "./skill-pyramid-routing";
 import type { Edge } from "./skill-tree-math";
 
 const M: PyramidMetrics = { rowH: 150, bandHeaderH: 34, bandGap: 18, cardH: 112 };
@@ -64,10 +64,7 @@ const PROD_EDGES: Edge[] = [
 
 function prodLayout(): PyramidLayout {
   const names = new Map(PROD_NODES.map((n) => [n.id, n.name]));
-  return layoutPyramid(
-    orderAndPlace(buildPyramid(PROD_NODES, PROD_EDGES), PROD_EDGES, names),
-    M,
-  );
+  return layoutPyramid(orderAndPlace(buildPyramid(PROD_NODES, PROD_EDGES), PROD_EDGES, names), M);
 }
 
 /** Odcinki pionowe łamanej (te, które mogą wjechać w kartę). */

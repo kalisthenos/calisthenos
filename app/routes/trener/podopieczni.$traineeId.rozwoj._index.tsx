@@ -1,8 +1,8 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { ProgressionList } from "~/components/progression-list";
 import { SkillTreeView } from "~/components/skill-tree";
 import { requireUser } from "~/lib/api/auth";
-import { parseListControls, type ListControlsSpec } from "~/lib/list-params";
+import { type ListControlsSpec, parseListControls } from "~/lib/list-params";
 import { developmentSortFrom, loadTraineeDevelopment } from "~/lib/skill-tree";
 import { findTraineeRef } from "~/lib/trainees";
 

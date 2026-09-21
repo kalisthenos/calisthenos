@@ -1,5 +1,5 @@
-import { describe, expect, it, vi } from "vitest";
 import { exerciseCategoriesControllerList } from "@kalisthenos/api-client";
+import { describe, expect, it, vi } from "vitest";
 
 // Potrzebne wyłącznie dla `publicFileUrl` — pozostałe testy w tym pliku podają
 // `baseUrl` jawnie, więc do konfiguracji nie sięgają w ogóle.
@@ -7,8 +7,8 @@ vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.internal", API_PUBLIC_URL: "https://api.kalisthenos.test" }),
 }));
 
-import { ApiError } from "./errors";
 import { createApiClient, orNull, publicFileUrl } from "./client";
+import { ApiError } from "./errors";
 
 function odpowiedz(status: number, cialo: unknown): Response {
   return new Response(JSON.stringify(cialo), {

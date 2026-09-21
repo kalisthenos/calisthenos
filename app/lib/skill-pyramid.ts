@@ -1,5 +1,5 @@
 import { SKILL_TIERS, type SkillTier } from "~/lib/skill-tier";
-import { orderWithinLayer, type Edge } from "~/lib/skill-tree-math";
+import { type Edge, orderWithinLayer } from "~/lib/skill-tree-math";
 
 /**
  * Układ piramidy umiejętności: przypisanie pasów/podrzędów + geometria planszy.

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { parseShotArgs, selectTargets, slugForPath, type ShotTarget } from "./shots-lib";
+import { type ShotTarget, parseShotArgs, selectTargets, slugForPath } from "./shots-lib";
 
 describe("slugForPath", () => {
   it("zamienia ścieżkę na slug z podkreśleniami", () => {

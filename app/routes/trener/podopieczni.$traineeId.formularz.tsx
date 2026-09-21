@@ -1,4 +1,4 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { Icons } from "~/components/icons";
 import { requireUser } from "~/lib/api/auth";
 import { fmtDateTime } from "~/lib/format";

@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
   SKILL_TIERS,
+  type SkillTier,
   TIER_LABEL,
   canBePrerequisite,
   highestEarnedTier,
   tierRank,
-  type SkillTier,
 } from "./skill-tier";
 
 describe("TIER_LABEL", () => {

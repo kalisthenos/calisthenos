@@ -1,10 +1,10 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { Icons } from "~/components/icons";
 import { ListControls } from "~/components/list-controls";
 import { requireUser } from "~/lib/api/auth";
-import { parseListControls, type ListControlsSpec } from "~/lib/list-params";
-import { SKILL_TIERS, TIER_LABEL, type SkillTier } from "~/lib/skill-tier";
-import { listSkillsForTrainer, type SkillListItem } from "~/lib/skills";
+import { type ListControlsSpec, parseListControls } from "~/lib/list-params";
+import { SKILL_TIERS, type SkillTier, TIER_LABEL } from "~/lib/skill-tier";
+import { type SkillListItem, listSkillsForTrainer } from "~/lib/skills";
 
 export async function loader(args: LoaderFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainer" });

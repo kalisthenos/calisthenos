@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
 import {
+  type Edge,
   assignLayers,
   nodeState,
   orderWithinLayer,
   topoOrder,
   wouldCreateCycle,
-  type Edge,
 } from "./skill-tree-math";
 
 describe("wouldCreateCycle", () => {
@@ -71,12 +71,20 @@ describe("nodeState", () => {
   });
   it("available gdy brak zdarzeń i wszystkie prereki mastered", () => {
     expect(
-      nodeState({ hasEvents: false, atTopVariation: false, prereqStates: ["mastered", "mastered"] }),
+      nodeState({
+        hasEvents: false,
+        atTopVariation: false,
+        prereqStates: ["mastered", "mastered"],
+      }),
     ).toBe("available");
   });
   it("locked gdy brak zdarzeń i jakiś prereq nie-mastered", () => {
     expect(
-      nodeState({ hasEvents: false, atTopVariation: false, prereqStates: ["mastered", "in_progress"] }),
+      nodeState({
+        hasEvents: false,
+        atTopVariation: false,
+        prereqStates: ["mastered", "in_progress"],
+      }),
     ).toBe("locked");
   });
   it("korzeń bez zdarzeń jest available (brak prereków)", () => {

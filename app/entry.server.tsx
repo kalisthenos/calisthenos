@@ -1,12 +1,12 @@
 import { PassThrough } from "node:stream";
 
-import type { EntryContext, HandleErrorFunction, RouterContextProvider } from "react-router";
 import { createReadableStreamFromReadable } from "@react-router/node";
-import { ServerRouter } from "react-router";
-import { logUnhandled } from "~/lib/logger";
 import { isbot } from "isbot";
 import type { RenderToPipeableStreamOptions } from "react-dom/server";
 import { renderToPipeableStream } from "react-dom/server";
+import type { EntryContext, HandleErrorFunction, RouterContextProvider } from "react-router";
+import { ServerRouter } from "react-router";
+import { logUnhandled } from "~/lib/logger";
 
 export const streamTimeout = 5_000;
 

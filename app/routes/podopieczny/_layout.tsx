@@ -1,4 +1,4 @@
-import { NavLink, Outlet, redirect, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { type LoaderFunctionArgs, NavLink, Outlet, redirect, useLoaderData } from "react-router";
 import { Icons } from "~/components/icons";
 import { UserMenu } from "~/components/user-menu";
 import { requireUser } from "~/lib/api/auth";

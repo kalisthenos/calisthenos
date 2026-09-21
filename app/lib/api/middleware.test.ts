@@ -21,9 +21,9 @@ vi.mock("~/lib/env", () => ({
 import { RouterContextProvider } from "react-router";
 import { apiContext } from "./context";
 import { ApiError } from "./errors";
-import { resetRefreshState } from "./refresh";
-import { buildSessionCookie, readSessionCookie, type ApiSession } from "./session";
 import { apiMiddleware } from "./middleware";
+import { resetRefreshState } from "./refresh";
+import { type ApiSession, buildSessionCookie, readSessionCookie } from "./session";
 
 const TERAZ = new Date("2026-08-31T10:00:00Z");
 

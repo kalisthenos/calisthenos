@@ -35,10 +35,7 @@ export interface ListControlsState {
 }
 
 /** Parsuje i waliduje stan kontrolek z URLSearchParams. Nie ufa wejściu. */
-export function parseListControls(
-  sp: URLSearchParams,
-  spec: ListControlsSpec,
-): ListControlsState {
+export function parseListControls(sp: URLSearchParams, spec: ListControlsSpec): ListControlsState {
   const rawSort = sp.get("sort");
   const sort =
     rawSort !== null && spec.sortOptions.some((o) => o.key === rawSort)

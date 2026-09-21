@@ -1,4 +1,4 @@
-import { TIER_LABEL, type SkillTier } from "~/lib/skill-tier";
+import { type SkillTier, TIER_LABEL } from "~/lib/skill-tier";
 
 /**
  * Plakietka tieru — mono wersalik w idiomie `.badge` (klasa nadaje uppercase i mono).

@@ -1,15 +1,15 @@
 import {
+  type ActionFunctionArgs,
   Form,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { SKILL_TIERS, TIER_LABEL } from "~/lib/skill-tier";
-import { SkillError, createSkill } from "~/lib/skills";
 import { SkillFormSchema } from "~/lib/skill-types";
+import { SkillError, createSkill } from "~/lib/skills";
 
 export async function loader(args: LoaderFunctionArgs) {
   requireUser(args.context, { role: "trainer" });

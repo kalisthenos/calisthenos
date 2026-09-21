@@ -137,7 +137,14 @@ export function ScheduleForm({ defaultValue, defaultStartsOn }: ScheduleFormProp
 
         <div className="field">
           <label htmlFor="sf-timeOfDay">Godzina</label>
-          <input id="sf-timeOfDay" className="input" type="time" name="timeOfDay" defaultValue={time} required />
+          <input
+            id="sf-timeOfDay"
+            className="input"
+            type="time"
+            name="timeOfDay"
+            defaultValue={time}
+            required
+          />
         </div>
 
         <div className="field">

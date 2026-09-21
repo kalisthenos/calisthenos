@@ -1,11 +1,11 @@
-import { describe, it, expect } from "vitest";
-import {
-  SkillFormSchema,
-  AdvancementFormSchema,
-  ReorderFormSchema,
-  PrerequisiteFormSchema,
-} from "./skill-types";
+import { describe, expect, it } from "vitest";
 import { SKILL_TIERS } from "./skill-tier";
+import {
+  AdvancementFormSchema,
+  PrerequisiteFormSchema,
+  ReorderFormSchema,
+  SkillFormSchema,
+} from "./skill-types";
 
 describe("SkillFormSchema", () => {
   it("accepts a valid skill", () => {

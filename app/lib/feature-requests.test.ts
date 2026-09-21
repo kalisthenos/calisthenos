@@ -2,9 +2,9 @@ import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
+  FeatureRequestError,
   createFeatureRequest,
   deleteFeatureRequest,
-  FeatureRequestError,
   getForTrainer,
   listForTrainee,
   listForTrainer,

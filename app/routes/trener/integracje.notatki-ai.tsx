@@ -106,8 +106,8 @@ export default function IntegracjeNotatkiAi() {
         {notetaker.enabled ? (
           <div>
             <p style={{ margin: "0 0 16px" }}>
-              Notatki AI są <strong>włączone</strong>. Bot dołączy do spotkań z linkiem
-              w kalendarzu i przygotuje notatkę z ich przebiegu.
+              Notatki AI są <strong>włączone</strong>. Bot dołączy do spotkań z linkiem w kalendarzu
+              i przygotuje notatkę z ich przebiegu.
             </p>
             <Form method="post">
               <input type="hidden" name="intent" value="disable" />
@@ -119,8 +119,8 @@ export default function IntegracjeNotatkiAi() {
         ) : (
           <div>
             <p className="muted" style={{ margin: "0 0 16px" }}>
-              Notatki AI są wyłączone. Po włączeniu bot dołączy do spotkań z linkiem w kalendarzu
-              i przygotuje notatkę z ich przebiegu.
+              Notatki AI są wyłączone. Po włączeniu bot dołączy do spotkań z linkiem w kalendarzu i
+              przygotuje notatkę z ich przebiegu.
             </p>
 
             {calendarBlocked && (

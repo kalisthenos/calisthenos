@@ -1,24 +1,30 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  rangeStartIso,
-  shouldAggregateWeekly,
-  weekStartIso,
-  aggregateToWeeks,
-  seriesForRange,
-  markPrs,
-  classifyStatus,
-  statusFromSessions,
-  unitLabelPl,
-  computePeriodChangePct,
-  normalizeToPctFromStart,
-  sortProgressionRows,
-  summarizeStatuses,
-  excludeByExerciseId,
-  type SessionPoint,
   type ProgressionListRow,
+  type SessionPoint,
+  aggregateToWeeks,
+  classifyStatus,
+  computePeriodChangePct,
+  excludeByExerciseId,
+  markPrs,
+  normalizeToPctFromStart,
+  rangeStartIso,
+  seriesForRange,
+  shouldAggregateWeekly,
+  sortProgressionRows,
+  statusFromSessions,
+  summarizeStatuses,
+  unitLabelPl,
+  weekStartIso,
 } from "./progression-math";
 
-const sp = (performedOn: string, best: number, avgReps = best, avgRpe: number | null = 7, volume = best * 3): SessionPoint => ({
+const sp = (
+  performedOn: string,
+  best: number,
+  avgReps = best,
+  avgRpe: number | null = 7,
+  volume = best * 3,
+): SessionPoint => ({
   performedOn,
   best,
   avgReps,
@@ -196,7 +202,11 @@ describe("normalizeToPctFromStart", () => {
 });
 
 describe("sortProgressionRows", () => {
-  const row = (name: string, status: ProgressionListRow["status"], lastPerformedOn: string): ProgressionListRow => ({
+  const row = (
+    name: string,
+    status: ProgressionListRow["status"],
+    lastPerformedOn: string,
+  ): ProgressionListRow => ({
     exerciseId: name,
     name,
     unit: "REPS",
@@ -209,7 +219,10 @@ describe("sortProgressionRows", () => {
     status,
   });
   it("'recent' sorts by lastPerformedOn desc", () => {
-    const out = sortProgressionRows([row("a", "up", "2026-01-01"), row("b", "up", "2026-02-01")], "recent");
+    const out = sortProgressionRows(
+      [row("a", "up", "2026-01-01"), row("b", "up", "2026-02-01")],
+      "recent",
+    );
     expect(out.map((r) => r.name)).toEqual(["b", "a"]);
   });
   it("'attention' puts down → flat → up → new", () => {
@@ -223,7 +236,14 @@ describe("sortProgressionRows", () => {
 
 describe("summarizeStatuses", () => {
   it("counts statuses", () => {
-    expect(summarizeStatuses([{ status: "up" }, { status: "up" }, { status: "down" }, { status: "new" }])).toEqual({
+    expect(
+      summarizeStatuses([
+        { status: "up" },
+        { status: "up" },
+        { status: "down" },
+        { status: "new" },
+      ]),
+    ).toEqual({
       up: 2,
       flat: 0,
       down: 1,
@@ -234,10 +254,7 @@ describe("summarizeStatuses", () => {
 
 describe("aggregateToWeeks z nullowalnym RPE", () => {
   it("uśrednia tylko nie-null RPE w obrębie tygodnia", () => {
-    const out = aggregateToWeeks([
-      sp("2026-05-25", 5, 5, 8, 15),
-      sp("2026-05-27", 7, 6, null, 18),
-    ]);
+    const out = aggregateToWeeks([sp("2026-05-25", 5, 5, 8, 15), sp("2026-05-27", 7, 6, null, 18)]);
     expect(out).toHaveLength(1);
     expect(out[0]!.avgRpe).toBe(8); // null pominięte
   });

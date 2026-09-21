@@ -1,20 +1,20 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
   useLoaderData,
   useNavigation,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { ConfirmSubmitButton, useAlert, useConfirm } from "~/components/confirm-provider";
 import { Icons } from "~/components/icons";
 import { useToast } from "~/components/toast-provider";
 import { requireUser } from "~/lib/api/auth";
 import { listActiveExercisesForTrainer } from "~/lib/exercises";
-import { fmtDate, pluralizePl, type PlForms } from "~/lib/format";
+import { type PlForms, fmtDate, pluralizePl } from "~/lib/format";
 
 const BLOK: PlForms = { one: "blok", few: "bloki", many: "bloków" };
 import {
@@ -25,10 +25,10 @@ import {
   type SessionForm,
 } from "~/lib/plan-types";
 import {
+  PlanError,
   createDraftFromActive,
   deletePlan,
   loadPlanForTrainer,
-  PlanError,
   publishPlan,
   saveDraftPlan,
 } from "~/lib/plans";

@@ -12,9 +12,9 @@ vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.test" }),
 }));
 
+import { AuthError, acceptInvite, endSession, startSession } from "./auth-session";
 import { createApiClient } from "./client";
 import { ApiError } from "./errors";
-import { AuthError, acceptInvite, endSession, startSession } from "./auth-session";
 
 const PROFIL = {
   partyId: "p-1",

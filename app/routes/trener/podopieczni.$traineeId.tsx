@@ -1,11 +1,11 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
   useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { ConfirmSubmitButton } from "~/components/confirm-provider";
 import { Icons } from "~/components/icons";
@@ -14,19 +14,19 @@ import { Pagination, parsePage } from "~/components/pagination";
 import {
   CoverageCard,
   HealthTilesCard,
-  PlateauCard,
   PlanUsageCard,
+  PlateauCard,
   TagDistributionCard,
 } from "~/components/trainee-health";
 import { requireUser } from "~/lib/api/auth";
 import { loadUpcomingConsultations } from "~/lib/consultations";
-import { daysAgo, fmtDate, fmtDateTime, pluralizePl, type PlForms } from "~/lib/format";
-import { parseListControls, type ListControlsSpec } from "~/lib/list-params";
+import { type PlForms, daysAgo, fmtDate, fmtDateTime, pluralizePl } from "~/lib/format";
+import { type ListControlsSpec, parseListControls } from "~/lib/list-params";
 import { getFormStatusForTrainee } from "~/lib/onboarding-forms";
-import { deletePlan, listPlansForTrainee, PlanError, planDeleteOutcomeMessage } from "~/lib/plans";
+import { PlanError, deletePlan, listPlansForTrainee, planDeleteOutcomeMessage } from "~/lib/plans";
 import { loadTraineeOverview } from "~/lib/stats";
-import { deleteTraineeFully, findTraineeRef, TraineeDeleteError } from "~/lib/trainees";
-import { listTraineeLogs, type LogSort, type VideoFilter } from "~/lib/workouts";
+import { TraineeDeleteError, deleteTraineeFully, findTraineeRef } from "~/lib/trainees";
+import { type LogSort, type VideoFilter, listTraineeLogs } from "~/lib/workouts";
 
 const SESJA: PlForms = { one: "sesja", few: "sesje", many: "sesji" };
 

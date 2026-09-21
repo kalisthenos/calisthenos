@@ -1,17 +1,17 @@
 import { useCallback, useEffect, useState } from "react";
-import { Link, redirect, useLoaderData, useNavigate, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, redirect, useLoaderData, useNavigate } from "react-router";
 import { Icons } from "~/components/icons";
 import { requireUser } from "~/lib/api/auth";
 import { fmtDate } from "~/lib/format";
 import { hasPendingOnboarding } from "~/lib/onboarding-forms";
 import {
+  type Archetype,
+  type WrappedPrItem,
+  type WrappedSummaryView,
   describeArchetype,
   isPastMonth,
   loadWrappedSummary,
   parseYM,
-  type Archetype,
-  type WrappedPrItem,
-  type WrappedSummaryView,
 } from "~/lib/wrapped";
 
 // ============================================================

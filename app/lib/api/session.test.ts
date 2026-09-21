@@ -56,9 +56,7 @@ describe("ciastko sesji", () => {
     // `SESSION_TTL_S` w BE to 30 dni. Ciastko przeżywające token odświeżający
     // daje użytkownikowi ekran ładowania zakończony wylogowaniem zamiast
     // ekranu logowania.
-    expect(buildSessionCookie(sessionFromTokens(TOKENY, TERAZ))).toContain(
-      "Max-Age=2592000",
-    );
+    expect(buildSessionCookie(sessionFromTokens(TOKENY, TERAZ))).toContain("Max-Age=2592000");
   });
 
   it("kasowanie unieważnia ciastko natychmiast", () => {

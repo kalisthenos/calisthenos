@@ -6,12 +6,12 @@ import type {
 import { Link } from "react-router";
 import { Icons } from "~/components/icons";
 import {
+  type BarSegment,
   Heatmap,
   SegmentedBar,
   SegmentedBarLegend,
-  type BarSegment,
 } from "~/components/stat-widgets";
-import { fmtDate, pluralizePl, type PlForms } from "~/lib/format";
+import { type PlForms, fmtDate, pluralizePl } from "~/lib/format";
 import type { HeatmapDay } from "~/lib/stats";
 
 // ============================================================

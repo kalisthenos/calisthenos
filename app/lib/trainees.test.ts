@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
+  TraineeDeleteError,
   deleteTraineeFully,
   findTraineeRef,
   listClientsForTrainer,
   listTraineesOfTrainer,
-  TraineeDeleteError,
 } from "./trainees";
 
 // Mocka `~/lib/env` tu już nie ma: `trainees.ts` przestał importować

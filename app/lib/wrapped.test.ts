@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
+  type WrappedSummaryView,
   describeArchetype,
   formatYM,
   isPastMonth,
@@ -9,7 +10,6 @@ import {
   loadWrappedSummary,
   monthLabel,
   parseYM,
-  type WrappedSummaryView,
 } from "./wrapped";
 
 function klient(reguly: (req: Request) => Response | Promise<Response>) {

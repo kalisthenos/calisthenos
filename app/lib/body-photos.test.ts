@@ -18,8 +18,8 @@ import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import type { BodyPhotoDto } from "./body-photos";
 import {
-  addBodyPhoto,
   BodyPhotoError,
+  addBodyPhoto,
   deleteBodyPhoto,
   getSideBySidePhotoPairs,
   listAllMyBodyPhotos,

@@ -1,4 +1,9 @@
-import { DEFAULT_METRICS, VIEW_W, type PyramidLayout, type PyramidMetrics } from "~/lib/skill-pyramid";
+import {
+  DEFAULT_METRICS,
+  type PyramidLayout,
+  type PyramidMetrics,
+  VIEW_W,
+} from "~/lib/skill-pyramid";
 import type { Edge } from "~/lib/skill-tree-math";
 
 /**
@@ -98,7 +103,12 @@ function findCorridor(
 }
 
 /** Pierwszy pas, w którym poziomy odcinek nikomu nie wejdzie na drogę. */
-function allocLane(lanes: Map<number, Array<Array<[number, number]>>>, key: number, x1: number, x2: number): number {
+function allocLane(
+  lanes: Map<number, Array<Array<[number, number]>>>,
+  key: number,
+  x1: number,
+  x2: number,
+): number {
   const lo = Math.min(x1, x2) + RUN_PAD;
   const hi = Math.max(x1, x2) - RUN_PAD;
   const list = lanes.get(key) ?? [];

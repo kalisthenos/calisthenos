@@ -1,6 +1,6 @@
+import { RouterContextProvider } from "react-router";
 // @vitest-environment node
 import { describe, expect, it } from "vitest";
-import { RouterContextProvider } from "react-router";
 import { apiContext } from "~/lib/api/context";
 import { loader } from "./_index";
 

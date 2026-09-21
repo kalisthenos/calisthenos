@@ -3,10 +3,10 @@ import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
   type ConsultationScheduleView,
+  ScheduleError,
   deactivateSchedule,
   defaultTitle,
   getActiveSchedule,
-  ScheduleError,
   upsertSchedule,
 } from "./consultation-schedules";
 import type { ScheduleForm } from "./consultation-types";
