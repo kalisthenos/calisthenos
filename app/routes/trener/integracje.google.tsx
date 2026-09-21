@@ -10,6 +10,7 @@ import {
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import {
+  calendarConnectionCopy,
   disconnectCalendar,
   getCalendarConnection,
   startCalendarAuthorization,
@@ -66,10 +67,11 @@ export default function IntegracjeGoogle() {
   const okParam = calendarParam === "ok";
   const errorParam = calendarParam === "error" ? searchParams.get("reason") : null;
 
-  // `broken` to jest połączenie — zepsute, ale istniejące, a jedyną drogą
-  // wyjścia z niego jest „Rozłącz". Ten sam podział, co przed integracją,
-  // gdzie decydowała obecność wiersza.
-  const polaczone = connection.status !== "disconnected";
+  // TRZY stany kontraktu, nie dwa. Do D-FE-2 stało tu `status !==
+  // "disconnected"`, przez co `broken` wyglądał identycznie jak `connected`
+  // i trener czytał „Połączone konto", gdy nic się nie synchronizowało.
+  // Reguła mieszka w module, bo tylko tam da się jej dowieść testem.
+  const stan = calendarConnectionCopy(connection.status);
 
   return (
     <div>
@@ -112,31 +114,41 @@ export default function IntegracjeGoogle() {
 
         <h2 style={{ fontSize: 17, margin: "0 0 12px" }}>Google Calendar</h2>
 
-        {polaczone ? (
-          <div>
-            <p style={{ margin: "0 0 16px" }}>
-              Połączone konto: <strong>{connection.accountLabel ?? "(połączone)"}</strong>
-            </p>
+        {stan.ostrzezenie && (
+          <div className="alert alert-error" style={{ marginBottom: 16 }}>
+            {stan.ostrzezenie}
+          </div>
+        )}
+
+        {stan.pokazKonto ? (
+          <p style={{ margin: "0 0 16px" }}>
+            Połączone konto: <strong>{connection.accountLabel ?? "(połączone)"}</strong>
+          </p>
+        ) : (
+          <p className="muted" style={{ margin: "0 0 16px" }}>
+            Brak połączonego konta Google. Kliknij poniżej, aby autoryzować dostęp do kalendarza.
+          </p>
+        )}
+
+        <div className="row" style={{ gap: 8 }}>
+          {/* Zgoda: przy `broken` jako „ponownie", przy braku konta jako pierwsza. */}
+          {(stan.polaczOdNowa || !stan.pokazKonto) && (
+            <Form method="post">
+              <input type="hidden" name="intent" value="connect" />
+              <button type="submit" className="btn btn-primary">
+                {stan.polaczOdNowa ? "Połącz ponownie" : "Połącz z Google"}
+              </button>
+            </Form>
+          )}
+          {stan.mozliwoscRozlaczenia && (
             <Form method="post">
               <input type="hidden" name="intent" value="disconnect" />
               <button type="submit" className="btn btn-ghost" style={{ color: "var(--danger)" }}>
                 Rozłącz
               </button>
             </Form>
-          </div>
-        ) : (
-          <div>
-            <p className="muted" style={{ margin: "0 0 16px" }}>
-              Brak połączonego konta Google. Kliknij poniżej, aby autoryzować dostęp do kalendarza.
-            </p>
-            <Form method="post">
-              <input type="hidden" name="intent" value="connect" />
-              <button type="submit" className="btn btn-primary">
-                Połącz z Google
-              </button>
-            </Form>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

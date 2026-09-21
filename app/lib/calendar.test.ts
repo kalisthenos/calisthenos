@@ -6,7 +6,12 @@
 // wspólnego z badanym kodem. Ten sam powód, co w `app/routes/wyloguj.test.ts`.
 import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
-import { disconnectCalendar, getCalendarConnection, startCalendarAuthorization } from "./calendar";
+import {
+  calendarConnectionCopy,
+  disconnectCalendar,
+  getCalendarConnection,
+  startCalendarAuthorization,
+} from "./calendar";
 
 function klient(reguly: (req: Request) => Response) {
   return createApiClient({
@@ -95,5 +100,52 @@ describe("calendar — kalendarz zewnętrzny na kontrakcie", () => {
 
     expect(metoda).toBe("DELETE");
     expect(sciezka).toBe("/v1/calendar/connection");
+  });
+});
+
+/**
+ * D-FE-2. Kontrakt niesie TRZY stany, a ekran integracji pokazywał dwa —
+ * `broken` wyglądał identycznie jak `connected`, więc trener z cofniętą zgodą
+ * czytał „Połączone konto" i nic więcej. Reguła mieszka tutaj, a nie w trasie,
+ * bo tylko tak da się jej dowieść bez renderowania komponentu.
+ */
+describe("calendarConnectionCopy — trzy stany kontraktu, trzy różne ekrany", () => {
+  it("połączone: bez ostrzeżenia, z samym rozłączeniem", () => {
+    const copy = calendarConnectionCopy("connected");
+
+    expect(copy.ostrzezenie).toBeNull();
+    expect(copy.polaczOdNowa).toBe(false);
+    expect(copy.mozliwoscRozlaczenia).toBe(true);
+  });
+
+  it("rozłączone: zaproszenie do połączenia, bez rozłączania", () => {
+    const copy = calendarConnectionCopy("disconnected");
+
+    expect(copy.ostrzezenie).toBeNull();
+    expect(copy.polaczOdNowa).toBe(false);
+    expect(copy.mozliwoscRozlaczenia).toBe(false);
+  });
+
+  it("zepsute: ostrzeżenie ORAZ obie drogi wyjścia naraz", () => {
+    const copy = calendarConnectionCopy("broken");
+
+    // Bez tego zdania trener nie dowie się, że integracja stanęła — dowiadywał
+    // się dotąd przypadkiem, z komunikatu przy „Synchronizuj z Google".
+    expect(copy.ostrzezenie).not.toBeNull();
+    // OBIE drogi, bo ekran nie wie, która zadziała: po `auth-permanent`
+    // wystarcza ponowna zgoda (`save()` zeruje `broken_at`), po `gone` trzeba
+    // najpierw rozłączyć, bo w wierszu zostaje `calendar_id` wskazujący
+    // nieistniejący kalendarz. Kontrakt tych dwóch nie rozróżnia.
+    expect(copy.polaczOdNowa).toBe(true);
+    expect(copy.mozliwoscRozlaczenia).toBe(true);
+  });
+
+  it("`broken` NIE jest liczone jako brak połączenia", () => {
+    // Regresja wprost: `status !== "disconnected"` było jedyną regułą tego
+    // ekranu i zlewało `broken` z `connected`. Konto zostaje pokazane — to
+    // wciąż jest połączenie, tylko wymaga odnowienia.
+    expect(calendarConnectionCopy("broken").pokazKonto).toBe(true);
+    expect(calendarConnectionCopy("connected").pokazKonto).toBe(true);
+    expect(calendarConnectionCopy("disconnected").pokazKonto).toBe(false);
   });
 });
