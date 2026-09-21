@@ -1,5 +1,6 @@
 import {
   type ActionFunctionArgs,
+  Form,
   Link,
   type LoaderFunctionArgs,
   useActionData,
@@ -16,10 +17,10 @@ import { presentationFor } from "~/lib/consultation-status";
 import { TraineeActionSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
-  appWallClockNow,
   canTraineeRespond,
   getConsultationDetail,
   respondToOccurrence,
+  setActionItemStatus,
 } from "~/lib/consultations";
 import { fmtDateTime } from "~/lib/format";
 
@@ -36,6 +37,25 @@ export async function action(args: ActionFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainee" });
   const fd = await args.request.formData();
   const consultationId = String(fd.get("consultationId") ?? "");
+
+  // **Punkt akcji przestawia KAŻDA ZE STRON** — `docs/01` §I mówi to wprost,
+  // trasa `PATCH /v1/consultations/{id}/action-items/{itemId}` nosi
+  // `@Roles('trainer','trainee')`, a serwis obsługuje obie perspektywy. Do
+  // 2026-09-21 ten ekran renderował punkty bez żadnej akcji, więc rola po
+  // stronie BE nie miała konsumenta (D-FE-6).
+  if (fd.get("intent") === "toggle-item") {
+    const itemId = String(fd.get("itemId") ?? "");
+    const status = fd.get("status") === "resolved" ? "resolved" : "open";
+    try {
+      await setActionItemStatus(api, { consultationId, itemId, status });
+      return null;
+    } catch (e) {
+      if (e instanceof ConsultationError) return { error: e.userMessage };
+      if (e instanceof ApiError) throw toRouteResponse(e);
+      throw e;
+    }
+  }
+
   const parsedAction = TraineeActionSchema.safeParse(String(fd.get("action") ?? ""));
   if (!parsedAction.success) return { error: "Nieznana akcja." };
   const note = String(fd.get("note") ?? "").trim() || undefined;
@@ -131,7 +151,7 @@ export default function TraineeKonsultacjaDetail() {
         </div>
       )}
 
-      {/* Punkty do poprawy (read-only) */}
+      {/* Punkty do poprawy — od 2026-09-21 przestawialne także stąd (D-FE-6) */}
       {items.length > 0 && (
         <div>
           <div className="field-label" style={{ marginBottom: 10 }}>
@@ -165,12 +185,23 @@ export default function TraineeKonsultacjaDetail() {
                   >
                     {item.body}
                   </span>
-                  <span
-                    className="mono text-xs"
-                    style={{ color: resolved ? "var(--ok)" : "var(--muted)", flexShrink: 0 }}
-                  >
-                    {resolved ? "poprawione" : "otwarte"}
-                  </span>
+                  <Form method="post" style={{ display: "flex", flexShrink: 0 }}>
+                    <input type="hidden" name="intent" value="toggle-item" />
+                    <input type="hidden" name="consultationId" value={c.id} />
+                    <input type="hidden" name="itemId" value={item.id} />
+                    <input type="hidden" name="status" value={resolved ? "open" : "resolved"} />
+                    <button
+                      type="submit"
+                      className="btn btn-sm btn-ghost"
+                      style={{
+                        fontSize: 12,
+                        color: resolved ? "var(--ok)" : "var(--ink-2)",
+                        whiteSpace: "nowrap",
+                      }}
+                    >
+                      {resolved ? "poprawione" : "oznacz jako poprawione"}
+                    </button>
+                  </Form>
                 </div>
               );
             })}
