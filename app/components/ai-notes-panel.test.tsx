@@ -44,24 +44,36 @@ describe("AiNotesPanel — sześć stanów, sześć komunikatów", () => {
     expect(text).toContain("Omówiliśmy plan na wrzesień.");
   });
 
+  it("gotowa notatka NIE zlepia sekcji Markdown w jeden akapit — white-space: pre-wrap", () => {
+    // W1: `aiNotes` wraca z pięcioma sekcjami `## Nagłówek` + punkty
+    // (`notes-prompt.ts` w BE). `textOf` wyżej ścina WSZYSTKIE tagi razem
+    // z atrybutem `style`, więc `toContain` na treści przechodzi identycznie
+    // z `pre-wrap` i bez niego — nie jest to dowód na zachowanie odstępów.
+    // Tu sprawdzamy SUROWE wyjście SSR (bez cięcia tagów): `renderToStaticMarkup`
+    // serializuje `style` na `white-space:pre-wrap` (bez spacji po dwukropku —
+    // `react-dom/…/react-dom-server-legacy.*.development.js`, stałe
+    // `styleAssign`/`styleSeparator`), więc usunięcie `whiteSpace` z
+    // `TEXT_STYLE` zaczerwienia dokładnie tę asercję.
+    const html = renderToStaticMarkup(
+      <AiNotesPanel state="ready" notes={"## Cele\n\n- pierwszy punkt"} />,
+    );
+    expect(html).toContain("white-space:pre-wrap");
+  });
+
   it("stan `ready` bez treści NIE milczy — kontrakt złamany dostaje własny komunikat", () => {
     // Kontrakt gwarantuje `aiNotes` niepuste przy `aiNotesState: 'ready'`, ale
     // komponent nie ufa ciszy nawet wtedy, gdy założenie akurat nie trzyma.
     expect(textOf("ready", null)).toMatch(/nie udało się/i);
   });
 
-  it("każdy z sześciu stanów renderuje niepusty, widoczny tekst", () => {
-    const states: AiNotesState[] = [
-      "disabled",
-      "no-meeting-url",
-      "scheduled",
-      "pending",
-      "ready",
-      "failed",
-    ];
-    for (const state of states) {
-      const text = textOf(state, state === "ready" ? "notatka" : null);
-      expect(text.trim().length).toBeGreaterThan(0);
-    }
-  });
+  // Test „każdy z sześciu stanów renderuje niepusty, widoczny tekst" USUNIĘTY
+  // przy przeglądzie (drobne d1, fe-review.md) — nie mógł się zaczerwienić.
+  // Nagłówek karty „AI Notetaker" (`ai-notes-panel.tsx:121–127`) renderuje
+  // się ZAWSZE, więc `textOf(...)` nigdy nie jest pusty, nawet gdyby
+  // `renderBody` oddał pustkę dla wszystkich sześciu stanów — test w nazwie
+  // obiecywał kompletność, a nie sprawdzał niczego, czego nie sprawdzają
+  // testy wyżej. Prawdziwą bramką kompletności jest tu TYP:
+  // `STATE_COPY: Record<Exclude<AiNotesState, "ready">, …>`
+  // (`ai-notes-panel.tsx:30`) nie skompiluje się, gdy kontrakt dołoży siódmy
+  // stan — silniejsza ochrona niż jakikolwiek test w tym pliku.
 });

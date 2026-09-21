@@ -55,7 +55,17 @@ const STATE_COPY: Record<Exclude<AiNotesState, "ready">, { tone: Tone; message: 
   },
 };
 
-const TEXT_STYLE = { fontSize: 14, lineHeight: 1.6, margin: 0 };
+// `whiteSpace: "pre-wrap"` NIE jest kosmetyką: `aiNotes` jest Markdownem z
+// pięciu sekcji `## Nagłówek` + punkty (`notes-prompt.ts` w BE), a bez tego
+// przeglądarka zwija każdy `\n` do spacji i skleja wszystko w jeden akapit.
+// Ten sam poziom co `summary`/`traineeNote` w trasie konsultacji obok
+// (`podopieczni.$traineeId.konsultacje.$konsultacjaId.tsx:290,379`).
+const TEXT_STYLE: React.CSSProperties = {
+  fontSize: 14,
+  lineHeight: 1.6,
+  margin: 0,
+  whiteSpace: "pre-wrap",
+};
 
 function renderBody(
   state: AiNotesState,

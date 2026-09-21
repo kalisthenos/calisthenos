@@ -45,9 +45,14 @@ to pierwszy plik ustala poniższe konwencje, obowiązujące każdy kolejny scena
   kolejności PO przestawieniu.
 - **`page.goto` na adres STATYCZNY jest dozwolony** — reguła „klikiem, nie
   zgadywanym URL-em" chroni przed identyfikatorami losowanymi w bazie (sesja,
-  log), nie przed nawigacją na segment znany z góry. Doszło przy
-  `notatki-ai.spec.ts` (Zadanie 17), bo ekran, który testuje, nie ma jeszcze
-  wejścia z menu trenera.
+  log), nie przed nawigacją na segment znany z góry: to wystarczy samo w
+  sobie, niezależnie od tego, czy ekran ma akurat wejście z menu. Doszło przy
+  pierwszej wersji `notatki-ai.spec.ts` (Zadanie 17), gdy ekran faktycznie
+  nie miał jeszcze wejścia z nawigacji. `a977d0e` dołożył pozycję „Notatki AI"
+  do menu trenera, więc ten plik dziś wchodzi na ekran KLIKIEM (poprawione
+  przy przeglądzie, W3a) — wyjątek zostaje tu opisany jako możliwość dla
+  przyszłych scenariuszy, którym nie zależy akurat na dowiedzeniu tego
+  konkretnego przejścia.
 
 `notatki-ai.spec.ts` (Zadanie 17) dowodzi jednej gałęzi włącznika notatek AI —
 trenera BEZ podłączonego kalendarza (jedyny stan, jaki gwarantuje seeder: nie
@@ -55,9 +60,11 @@ zakłada wiersza `calendar_connections`). Gałąź „kalendarz podłączony →
 działa" wymagałaby prawdziwej zgody Google, do której to repozytorium nie ma
 konta testowego — i której backend celowo nie da się tu podstawić (`calendar-
 port.ts` w `apps/api-e2e` rzuca na każde wywołanie sieciowe zamiast cicho
-przepuszczać). Pełne uzasadnienie i to, gdzie ta gałąź POWINNA dostać dowód
-(test trasy przeciw podstawionemu klientowi, wzorem `integracje.google.test.tsx`,
-którego `integracje.notatki-ai.tsx` dziś nie ma) — w docblocku tego pliku.
+przepuszczać). Pełne uzasadnienie — w docblocku tego pliku. Test trasy przeciw podstawionemu
+klientowi, wzorem `integracje.google.test.tsx`, dziś istnieje:
+`integracje.notatki-ai.test.tsx` w tym samym katalogu co trasa — dopisany
+przy przeglądzie tej gałęzi (W2), skoro dokładnie to zgłosił jako rekomendację
+raport Zadania 17.
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../CLAUDE.md`](../CLAUDE.md).

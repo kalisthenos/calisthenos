@@ -20,14 +20,22 @@ function json(status: number, cialo: unknown): Response {
 describe("notetaker — integracja AI Notetaker na kontrakcie", () => {
   it("stan integracji przychodzi z kontraktu bez identyfikatora najemcy", async () => {
     let sciezka = "";
+    let metoda = "";
     const api = klient((req) => {
       sciezka = new URL(req.url).pathname;
+      metoda = req.method;
       return json(200, { enabled: false });
     });
 
     const wynik = await getNotetakerStatus(api);
 
     expect(sciezka).toBe("/v1/me/integrations/notetaker");
+    // Wszystkie trzy operacje (GET/PUT/DELETE) siedzą pod TYM SAMYM adresem —
+    // bez tej asercji podmiana `notetakerControllerGet` na `…Enable` w
+    // `getNotetakerStatus` (ten sam kształt wywołania, trzy linie od siebie
+    // w `notetaker.ts`) przechodziłaby ten test na zielono, mimo że loader
+    // trasy woła tę funkcję przy KAŻDYM wejściu na ekran.
+    expect(metoda).toBe("GET");
     expect(wynik).toEqual({ enabled: false });
   });
 

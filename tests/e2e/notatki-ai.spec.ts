@@ -14,14 +14,19 @@ import { expect, test } from "@playwright/test";
  * `disconnected`, nigdy `connected` ani `broken`. To jedyny fakt o stanie
  * kalendarza, jaki ten plik ma prawo zakładać.
  *
- * **Nowa konwencja: `page.goto` na adres STATYCZNY, nie klik w menu.** Reguła
- * „nawigacja klikiem, nie zgadywanym URL-em" (`tests/README.md`) chroni przed
- * identyfikatorami losowanymi w bazie (sesja, log) — `/trener/integracje/
- * notatki-ai` nie ma takiego segmentu, a menu trenera (`_layout.tsx`, link
- * „Integracje") linkuje dziś wyłącznie do `/trener/integracje/google`: ekran
- * notatek AI nie ma jeszcze wejścia z nawigacji (poza zakresem Zadania 15 —
- * plan go nie przewiduje). `page.goto` na stały, znany z góry segment nie jest
- * „zgadywaniem" w sensie tamtej reguły.
+ * **Wejście na ekran KLIKIEM w menu trenera**, nie `page.goto` — zgodnie
+ * z bazową konwencją katalogu („nawigacja klikiem, nie zgadywanym URL-em",
+ * `tests/README.md`). `_layout.tsx` dołożył pozycję „Notatki AI" do
+ * `NAV_ITEMS` commitem `a977d0e` — PO napisaniu tego pliku, więc pierwsza
+ * wersja wchodziła przez `page.goto` na sam adres (uzasadnienie: reguła
+ * „klikiem" chroni przed identyfikatorami losowanymi w bazie, nie przed
+ * nawigacją na segment znany z góry, a `/trener/integracje/notatki-ai`
+ * takiego segmentu nie ma — `tests/README.md` dopuszcza to osobno, dla
+ * scenariuszy, którym nie zależy akurat na dowiedzeniu tego przejścia).
+ * Poprawione przy przeglądzie (W3a, `fe-review.md`): skoro link już
+ * istnieje, klik dowodzi PRZY OKAZJI, że faktycznie prowadzi na właściwy
+ * ekran — jedyny element nawigacji, który ta gałąź wniosła, i który do tej
+ * pory nie miał żadnego testu.
  *
  * **Czego ten plik CELOWO nie dowodzi: połączonego kalendarza i samego
  * włączenia.** Brief Zadania 17 opisuje też drugą połowę przepływu — trenera
@@ -43,9 +48,11 @@ import { expect, test } from "@playwright/test";
  * czysta kontrola przepływu bez efektu specyficznego dla przeglądarki (branch
  * na `CalendarConnectionView.status`, wywołanie `enableNotetaker`) — dokładnie
  * to, co `e2e-test` SKILL.md każe dowodzić PODSTAWIONYM klientem, nie tutaj.
- * `integracje.google.tsx` ma taki test (`integracje.google.test.tsx`),
- * `integracje.notatki-ai.tsx` dziś nie — zgłoszone w raporcie zadania jako
- * rekomendacja, celowo nie dopisane tu bez pytania.
+ * `integracje.google.tsx` ma taki test (`integracje.google.test.tsx`);
+ * Zadanie 17 zgłosiło w raporcie brak tego samego dla `integracje.notatki-
+ * ai.tsx` jako rekomendację, celowo nie dopisaną bez pytania — a przy
+ * przeglądzie tej gałęzi (W2, `fe-review.md`) dopisaną: `integracje.notatki-
+ * ai.test.tsx`, ten sam katalog, ten sam wzorzec.
  */
 const TRAINER_EMAIL = "trener@kalisthenos.test";
 const TRAINER_PASSWORD = "Kalisthenos123!";
@@ -61,8 +68,13 @@ test("trener bez podłączonego kalendarza widzi wyjaśnienie i nieaktywny prze�
     await expect(page).toHaveURL(/\/trener\/?$/);
   });
 
-  await test.step("wejście na ekran notatek AI", async () => {
-    await page.goto("/trener/integracje/notatki-ai");
+  await test.step("wejście na ekran notatek AI PRZEZ MENU trenera", async () => {
+    // Jedyny element nawigacji, który ta gałąź wniosła (`_layout.tsx`,
+    // `a977d0e`) — i dotąd nieklikany przez żaden test. Klik zamiast
+    // `page.goto` dowodzi przy okazji przejścia z loaderem po drugiej
+    // stronie, tak jak krok „odnośnik naprawczy" niżej.
+    await page.getByRole("link", { name: "Notatki AI" }).click();
+    await expect(page).toHaveURL(/\/trener\/integracje\/notatki-ai\/?$/);
     await expect(page.getByRole("heading", { name: "Notatki AI" })).toBeVisible();
   });
 

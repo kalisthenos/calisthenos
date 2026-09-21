@@ -91,7 +91,7 @@ export default function IntegracjeNotatkiAi() {
 
       <div className="card" style={{ maxWidth: 560 }}>
         {"success" in (actionData ?? {}) && actionData && "success" in actionData && (
-          <div className="alert alert-success" style={{ marginBottom: 16 }}>
+          <div className="alert alert-ok" style={{ marginBottom: 16 }}>
             {(actionData as { success: string }).success}
           </div>
         )}
