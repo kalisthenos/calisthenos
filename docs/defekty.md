@@ -14,8 +14,26 @@ z ich ceną. Bez ostatniego pozycja jest narzekaniem.
 
 ## D-FE-1 · Cała bramka formatowania jest czerwona na Windows, przez same zakończenia linii
 
-**Kontekst:** środowisko + `verify-project` · **Status:** otwarty · **Zgłoszony:** 2026-09-07,
-przy znoszeniu reguły „git w FE prowadzi właściciel"
+**Kontekst:** środowisko + `verify-project` · **Status:** ✅ **naprawiony** 2026-09-21 ·
+**Zgłoszony:** 2026-09-07, przy znoszeniu reguły „git w FE prowadzi właściciel"
+
+**Co go zamknęło.** Pierwsza z czterech dróg wycenionych niżej — `.gitattributes` z
+`* text=auto eol=lf` plus `git add --renormalize .`. Renormalizacja dała **zero** zmian treści,
+dokładnie jak przewidywał ten wpis: indeks trzymał LF, rozjazd żył wyłącznie w katalogu roboczym.
+Drugi objaw (zaległość `organizeImports` i cztery naprawdę niesformatowane pliki) spłacony osobnym,
+czysto mechanicznym commitem: 96 plików, wyłącznie przestawienie importów i zawijanie linii.
+
+**Pomiar:** `npx biome check .` szedł z **267 błędów → 104 → 0**. Selftest korzenia, który miał
+z tego powodu jeden przypadek czerwony **na stałe** (`FE: zdrowy TypeScript`), pokazuje teraz
+**74 zdanych, 0 niezdanych** — więc każda porażka tego przebiegu jest odtąd regresją, bez wyjątku.
+
+**Co to zmienia w pracy:** `npx biome check .` w tym drzewie znów jest bramką, a nie ćwiczeniem
+z ignorowania. Sprawdzanie „po zmienionych plikach" przestało być obejściem i zostaje zwykłą
+oszczędnością czasu.
+
+**Zapłacony rachunek, dla porządku:** do tej poprawki hook `verify-project` odmawiał **każdej**
+edycji w tym drzewie. Przy Fali 1 kosztowało to ręczną konwersję dziesięciu plików, zanim dało się
+w nich cokolwiek zmienić — i to był powód, dla którego ta pozycja weszła na warsztat przed resztą.
 
 **Objaw.** `npx biome check .` w tym drzewie zwraca **260 błędów**. Ani jeden nie dotyczy kodu —
 wszystkie mówią o formatowaniu całych plików. Hook `verify-project` z korzenia, który po każdej
