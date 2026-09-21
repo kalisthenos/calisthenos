@@ -4,7 +4,11 @@ import { ConsultationRow } from "~/components/consultation-row";
 import { type DaySummary, MonthCalendar } from "~/components/month-calendar";
 import { requireUser } from "~/lib/api/auth";
 import { consultationPresentation, mostUrgentTone } from "~/lib/consultation-status";
-import { type ConsultationView, listOccurrencesInRange } from "~/lib/consultations";
+import {
+  type ConsultationView,
+  appWallClockNow,
+  listOccurrencesInRange,
+} from "~/lib/consultations";
 import { fmtTime, monthRangeUTC, shiftMonth, todayISO } from "~/lib/format";
 
 export async function loader(args: LoaderFunctionArgs) {
@@ -20,7 +24,9 @@ export async function loader(args: LoaderFunctionArgs) {
 
 export default function TrenerKonsultacjeKalendarz() {
   const { occurrences, m, year, month0, today } = useLoaderData<typeof loader>();
-  const now = Date.now();
+  // `scheduledAt` przychodzi z modułu w konwencji czasu ŚCIENNEGO, więc „teraz"
+  // musi być w tej samej — `Date.now()` myliłby się o offset strefy (D-FE-3).
+  const now = appWallClockNow();
 
   // Grupuj po dniu miesiąca (UTC).
   const byDay = new Map<number, ConsultationView[]>();

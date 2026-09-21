@@ -1,8 +1,8 @@
 import { useState } from "react";
 import {
   type ActionFunctionArgs,
-  type LoaderFunctionArgs,
   Link,
+  type LoaderFunctionArgs,
   useActionData,
   useLoaderData,
 } from "react-router";
@@ -18,9 +18,10 @@ import { defaultTitle } from "~/lib/consultation-schedules";
 import { consultationPresentation, mostUrgentTone } from "~/lib/consultation-status";
 import { TraineeActionSchema } from "~/lib/consultation-types";
 import {
-  canTraineeRespond,
   ConsultationError,
   type ConsultationView,
+  appWallClockNow,
+  canTraineeRespond,
   listOccurrencesInRange,
   loadUpcomingConsultations,
   respondToOccurrence,
@@ -62,7 +63,12 @@ export async function action(args: ActionFunctionArgs) {
 export default function PodopiecznyKonsultacjeKalendarz() {
   const { occurrences, next, m, year, month0, today } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const now = Date.now();
+  // Konwencja czasu ŚCIENNEGO, ta sama, w której moduł oddaje `scheduledAt`.
+  // `Date.now()` stało tu do D-FE-3 i przesuwało granicę „minione/nadchodzące"
+  // o offset strefy: spotkanie sprzed półtorej godziny siedziało latem
+  // w „Nadchodzące", a przypięty „najbliższy" liczył się już inaczej, bo jego
+  // granicę wyznacza zapytanie do BE — dwie odpowiedzi o tym samym terminie.
+  const now = appWallClockNow();
 
   // Grupuj terminy po dniu miesiąca (UTC).
   const byDay = new Map<number, ConsultationView[]>();

@@ -1,7 +1,7 @@
 import {
   type ActionFunctionArgs,
-  type LoaderFunctionArgs,
   Link,
+  type LoaderFunctionArgs,
   useActionData,
   useLoaderData,
 } from "react-router";
@@ -15,8 +15,9 @@ import { defaultTitle } from "~/lib/consultation-schedules";
 import { consultationPresentation } from "~/lib/consultation-status";
 import { TraineeActionSchema } from "~/lib/consultation-types";
 import {
-  canTraineeRespond,
   ConsultationError,
+  appWallClockNow,
+  canTraineeRespond,
   getConsultationDetail,
   respondToOccurrence,
 } from "~/lib/consultations";
@@ -59,7 +60,8 @@ export default function TraineeKonsultacjaDetail() {
   const meta = consultationPresentation({
     status: c.status,
     scheduledAtISO: c.scheduledAt,
-    nowMs: Date.now(),
+    // Czas ścienny, nie moment — `scheduledAt` jest w tej samej konwencji (D-FE-3).
+    nowMs: appWallClockNow(),
     viewer: "trainee",
   });
   // Z listy akcji BE, nie ze statusu — tabela przejść należy do kontraktu.

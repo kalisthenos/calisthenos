@@ -1,7 +1,7 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
-  type ActionFunctionArgs,
   type LoaderFunctionArgs,
   redirect,
   useActionData,
@@ -16,12 +16,13 @@ import { StatusBadge } from "~/components/consultation-status-badge";
 import { Icons } from "~/components/icons";
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
+import { parseConsultationDocFormData } from "~/lib/consultation-form.server";
 import { defaultTitle } from "~/lib/consultation-schedules";
 import { consultationPresentation } from "~/lib/consultation-status";
-import { parseConsultationDocFormData } from "~/lib/consultation-form.server";
 import { ConsultationDocFormSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
+  appWallClockNow,
   cancelOccurrence,
   deleteConsultation,
   documentConsultation,
@@ -201,7 +202,8 @@ export default function TrenerKonsultacjaDetail() {
   const meta = consultationPresentation({
     status: c.status,
     scheduledAtISO: c.scheduledAt,
-    nowMs: Date.now(),
+    // Czas ścienny, nie moment — `scheduledAt` jest w tej samej konwencji (D-FE-3).
+    nowMs: appWallClockNow(),
     viewer: "trainer",
   });
 

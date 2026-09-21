@@ -3,17 +3,18 @@ import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import type { ConsultationDocForm } from "./consultation-types";
 import {
-  cancelOccurrence,
-  canTraineeRespond,
-  ConsultationError,
   type ConsultationDetail,
+  ConsultationError,
   type ConsultationView,
+  LIST_WINDOW_DAYS,
+  appWallClockNow,
+  canTraineeRespond,
+  cancelOccurrence,
   createAdhocConsultation,
   deleteConsultation,
   documentConsultation,
   fromAppWallClock,
   getConsultationDetail,
-  LIST_WINDOW_DAYS,
   listOccurrencesForTrainer,
   listOccurrencesInRange,
   loadUpcomingConsultations,
@@ -99,6 +100,41 @@ describe("czas — moment BE ↔ czas ścienny FE", () => {
     expect(toAppWallClock(fromAppWallClock("2026-03-15T09:15:00.000Z"))).toBe(
       "2026-03-15T09:15:00.000Z",
     );
+  });
+
+  /**
+   * D-FE-3. `scheduledAt` opuszcza ten moduł jako CZAS ŚCIENNY zapisany
+   * w komponentach UTC, a `Date.now()` jest PRAWDZIWYM momentem. Porównanie
+   * jednego z drugim myli się dokładnie o offset strefy — dwie godziny latem,
+   * godzinę zimą — więc spotkanie sprzed półtorej godziny wypada latem jako
+   * przyszłe.
+   *
+   * **Dlaczego nie złapał tego żaden z testów wyżej:** wszystkie operują na
+   * datach oddalonych o dni, a pomyłka jest rzędu godzin. Test na danych,
+   * w których obie strony i tak się zgadzają, nie odróżnia poprawnej
+   * implementacji od zepsutej.
+   */
+  const TERAZ_LATEM = new Date("2026-09-21T12:00:00.000Z");
+
+  it("„teraz” da się wyrazić w konwencji tego modułu, nie tylko jako moment", () => {
+    expect(appWallClockNow(TERAZ_LATEM)).toBe(
+      Date.parse(toAppWallClock(TERAZ_LATEM.toISOString())),
+    );
+    expect(appWallClockNow(TERAZ_LATEM) - TERAZ_LATEM.getTime()).toBe(2 * 60 * 60 * 1000);
+  });
+
+  it("zimą przesunięcie jest godzinne — wartość zależy od momentu, nie jest stałą", () => {
+    const teraz = new Date("2026-01-21T12:00:00.000Z");
+    expect(appWallClockNow(teraz) - teraz.getTime()).toBe(60 * 60 * 1000);
+  });
+
+  it("termin sprzed 90 minut jest MINIONY, a wobec surowego momentu wyglądałby na przyszły", () => {
+    const zaczalSie = Date.parse(toAppWallClock("2026-09-21T10:30:00.000Z"));
+
+    expect(zaczalSie).toBeLessThan(appWallClockNow(TERAZ_LATEM));
+    // Kontrast, nie ozdoba: bez tej asercji test przechodziłby także przed
+    // poprawką, bo nie odróżniałby jednej konwencji czasu od drugiej.
+    expect(zaczalSie).toBeGreaterThan(TERAZ_LATEM.getTime());
   });
 });
 

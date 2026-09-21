@@ -1,4 +1,5 @@
 import {
+  consultationSyncControllerRun,
   consultationsControllerCancel,
   consultationsControllerCreate,
   consultationsControllerDocument,
@@ -8,7 +9,6 @@ import {
   consultationsControllerReschedule,
   consultationsControllerRespond,
   consultationsControllerSetActionItemStatus,
-  consultationSyncControllerRun,
 } from "@kalisthenos/api-client";
 import type {
   ConsultationActionItemView,
@@ -106,6 +106,28 @@ export function fromAppWallClock(wallClockISO: string): string {
   const wall = new Date(wallClockISO).getTime();
   const first = wall - offsetAt(wall);
   return new Date(wall - offsetAt(first)).toISOString();
+}
+
+/**
+ * „Teraz” **w konwencji tego modułu** — tej samej, w której wychodzi stąd
+ * `scheduledAt`.
+ *
+ * Istnieje, bo `Date.now()` jest PRAWDZIWYM momentem, a `scheduledAt` opuszcza
+ * `withAppWallClock` jako czas ŚCIENNY zapisany w komponentach UTC. Porównanie
+ * jednego z drugim myli się dokładnie o offset strefy — dwie godziny latem,
+ * godzinę zimą — i tak było w trzech miejscach naraz, aż do D-FE-3: spotkanie
+ * sprzed półtorej godziny siedziało latem w sekcji „Nadchodzące", a etykieta
+ * „do udokumentowania" zapalała się u trenera z dwugodzinnym opóźnieniem.
+ *
+ * **Ilekroć porównujesz coś z `scheduledAt`, bierzesz to, nie `Date.now()`.**
+ * Odwrotność też jest regułą: momentu z BE (np. `nowISO` dla zapytania o zakres)
+ * NIE przeliczamy — tam konwencja jest ta druga.
+ *
+ * Milisekundy są obcinane do pełnych sekund, bo `Intl` nie oddaje ułamków —
+ * granica „minione/nadchodzące" tego nie zauważa.
+ */
+export function appWallClockNow(now: Date = new Date()): number {
+  return wallClockMs(now.getTime());
 }
 
 const DATE_TIME_LOCAL = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/;
