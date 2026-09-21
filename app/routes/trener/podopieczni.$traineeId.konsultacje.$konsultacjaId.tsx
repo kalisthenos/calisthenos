@@ -8,6 +8,7 @@ import {
   useLoaderData,
   useSearchParams,
 } from "react-router";
+import { AiNotesPanel } from "~/components/ai-notes-panel";
 import { ConfirmSubmitButton } from "~/components/confirm-provider";
 import { ConsultationAlert } from "~/components/consultation-alert";
 import { ConsultationForm } from "~/components/consultation-form";
@@ -357,6 +358,15 @@ export default function TrenerKonsultacjaDetail() {
           </div>
         </div>
       )}
+
+      {/*
+        Notatka AI Notetakera — renderuje się BEZWARUNKOWO, niezależnie od
+        `isDocumented`/`isCancelled`: to jest cały sens sześciu stanów
+        `aiNotesState` (docs/04 §AI Notetaker) — trener ma się dowiedzieć
+        DLACZEGO notatki nie ma, nie tylko że jej nie ma. Zagnieżdżenie pod
+        warunkiem odtworzyłoby dokładnie tę ciszę, przed którą ma chronić.
+      */}
+      <AiNotesPanel state={c.aiNotesState} notes={c.aiNotes} />
 
       {/* Podsumowanie */}
       {c.summary && c.summary.trim().length > 0 && (

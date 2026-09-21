@@ -81,6 +81,16 @@ const NAV_ITEMS = [
     icon: "Link" as const,
     tailKey: null,
   },
+  {
+    // Druga pozycja, nie zakładka wewnątrz „Integracji": pasek podzakładek
+    // byłby w tym drzewie NOWĄ konwencją (dziś `NavLink` żyje wyłącznie
+    // w layoutach), a ekran bez wejścia z menu jest ekranem, którego nie ma.
+    to: "/trener/integracje/notatki-ai",
+    label: "Notatki AI",
+    end: false,
+    icon: "Note" as const,
+    tailKey: null,
+  },
 ];
 
 export default function TrenerLayout() {
