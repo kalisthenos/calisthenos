@@ -199,8 +199,18 @@ zostanie wykonana dwa razy i drugi raz wyrzucona.
 
 ## D-FE-4 · Reguły kontraktu policzone drugi raz po tej stronie i już rozjechane
 
-**Kontekst:** konsultacje · **Status:** otwarty · **Zgłoszony:** 2026-09-21, rozpoznaniem modułu
-konsultacji
+**Kontekst:** konsultacje · **Status:** ✅ **naprawiony** 2026-09-21 · **Zgłoszony:** 2026-09-21,
+rozpoznaniem modułu konsultacji
+
+**Co go zamknęło.** `presentationFor(termin.presentation)` w miejsce
+`consultationPresentation` — dziesięć wywołań w pięciu plikach. Etykieta przestała zależeć od
+ROLI, bo funkcja nie ma już takiego parametru: złamanie niezmiennika z `docs/02` §5 jest dziś
+**niewyrażalne**, a to mocniejsza obrona niż asercja. Przyciski trenera liczą się
+z `allowedActions`, przekładanie i odwołanie bramkowane osobno. Cztery martwe gwardie usunięte,
+a w ich miejscu stoi zdanie, gdzie tabela przejść naprawdę mieszka.
+
+Klucz nieznany ma gałąź zapasową — to zobowiązanie z **ADR-0042** (`presentation.key` jest
+`x-extensible-enum`), nie ostrożność.
 
 **Objaw.** Przycisk „Udokumentuj" pokazuje się przy terminie z prośbą o zmianę; kliknięcie kończy
 się `409` i komunikatem zamiast działaniem. Etykiety statusu liczy FE sam, mimo że kontrakt niesie
@@ -244,8 +254,15 @@ poprosił o zmianę. Rozjazd etykiet — stale, przy każdym renderze.
 
 ## D-FE-5 · Formularz terminu pokazuje pola, które niczego nie zmieniają
 
-**Kontekst:** konsultacje · **Status:** otwarty · **Zgłoszony:** 2026-09-21, rozpoznaniem modułu
-konsultacji
+**Kontekst:** konsultacje · **Status:** ✅ **naprawiony** 2026-09-21 · **Zgłoszony:** 2026-09-21,
+rozpoznaniem modułu konsultacji
+
+**Co go zamknęło.** Jeden schemat na dwie operacje rozdzielony na dwa: `ConsultationDocFormSchema`
+niesie dokładnie to, co przyjmuje `POST …/document`, a `AdhocConsultationFormSchema` rozszerza go
+o pola, które przyjmuje `POST /v1/consultations`. Który zestaw renderować, mówi prop `tryb`.
+`title` i `periodFrom`/`periodTo` odpadły z OBU ścieżek — kontrakt ich nie zna, a tytuł był przy
+tym polem **wymaganym**, blokującym zapis i niewysyłanym nigdzie. Limit `durationMin` zrównany
+z DTO (5–480) w schemacie, w polu i w formularzu przełożenia.
 
 **Objaw.** Trener w trybie „Udokumentuj" poprawia link do spotkania, godzinę albo czas trwania,
 zapisuje — i **nic się nie zmienia**. Bez ostrzeżenia i bez komunikatu. Osobno: czas trwania spoza
@@ -277,8 +294,12 @@ w `calisthenos-be/docs/defekty.md`, **D-20**.
 
 ## D-FE-6 · Podopieczny nie może odhaczyć punktu „do poprawy", choć kontrakt mu na to pozwala
 
-**Kontekst:** konsultacje · **Status:** otwarty · **Zgłoszony:** 2026-09-21, rozpoznaniem modułu
-konsultacji
+**Kontekst:** konsultacje · **Status:** ✅ **naprawiony** 2026-09-21 · **Zgłoszony:** 2026-09-21,
+rozpoznaniem modułu konsultacji
+
+**Co go zamknęło.** Akcja `toggle-item` na trasie podopiecznego i przycisk przy każdym punkcie —
+wzorem ekranu trenera. **Zero zmian w kontrakcie**: wszystko, czego ten ekran potrzebował, było
+w nim od początku, tylko nie miało konsumenta.
 
 **Objaw.** Punkty „do poprawy" są u podopiecznego wyłącznie do odczytu — z etykietą „otwarte" albo
 „poprawione" i bez żadnej akcji. U trenera ta sama lista ma przycisk „Oznacz jako poprawione".
