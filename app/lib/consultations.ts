@@ -325,7 +325,8 @@ export async function getConsultationDetail(
  * więc własny typ dostają `400` (walidacja BE ostrzejsza niż Zod — np. notatka
  * wymagana przy prośbie o zmianę, czas trwania 5–480 min), `404` (cudzy albo
  * nieistniejący termin lub podopieczny — §2 `docs/04`) i `409` (niedozwolone
- * przejście, odwołanie udokumentowanego, trwający przebieg synchronizacji).
+ * przejście, odwołanie udokumentowanego, trwający przebieg synchronizacji,
+ * **kolizja terminów** — `CONSULTATION_SLOT_TAKEN`, ADR-0043).
  * Reszta leci `ApiError`-em — awaria BE ma zostać awarią.
  */
 function toConsultationError(e: unknown): never {
