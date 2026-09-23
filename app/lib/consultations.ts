@@ -326,7 +326,8 @@ export async function getConsultationDetail(
  * wymagana przy prośbie o zmianę, czas trwania 5–480 min), `404` (cudzy albo
  * nieistniejący termin lub podopieczny — §2 `docs/04`) i `409` (niedozwolone
  * przejście, odwołanie udokumentowanego, trwający przebieg synchronizacji,
- * **kolizja terminów** — `CONSULTATION_SLOT_TAKEN`, ADR-0043).
+ * **kolizja terminów** — `CONSULTATION_SLOT_TAKEN`, ADR-0043, oraz **operacja
+ * spóźniona** — `CONSULTATION_ALREADY_STARTED`, D-19).
  * Reszta leci `ApiError`-em — awaria BE ma zostać awarią.
  */
 function toConsultationError(e: unknown): never {
