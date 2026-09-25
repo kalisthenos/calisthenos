@@ -18,7 +18,7 @@ function textOf(state: AiNotesState, notes: string | null): string {
   return html.replace(/<[^>]*>/g, " ");
 }
 
-describe("AiNotesPanel — sześć stanów, sześć komunikatów", () => {
+describe("AiNotesPanel — siedem stanów, siedem komunikatów", () => {
   it("brak odnośnika mówi, dlaczego notatki nie będzie", () => {
     expect(textOf("no-meeting-url", null)).toMatch(/odnośnik/i);
   });
@@ -37,6 +37,20 @@ describe("AiNotesPanel — sześć stanów, sześć komunikatów", () => {
 
   it("porażka nagrania albo transkrypcji jest nazwana wprost", () => {
     expect(textOf("failed", null)).toMatch(/nie udał/i);
+  });
+
+  it("niezlecony bot mówi, że notatki NIE BĘDZIE — i nie zgaduje dlaczego", () => {
+    const text = textOf("not-booked", null);
+
+    // Pierwsza asercja: rozstrzygnięcie, nie oczekiwanie. Ten stan zastąpił
+    // `scheduled`, który w tym samym układzie obiecywał bota.
+    expect(text).toMatch(/nie będzie/i);
+    // Druga jest ważniejsza i pilnuje własności KONTRAKTU: `not-booked` nie
+    // niesie przyczyny (`docs/04` §AI Notetaker), więc komunikat nie ma prawa
+    // jej twierdzić. „Może być" wolno, „jest" nie — bez tego ktoś w dobrej
+    // wierze dopisze tu „włącz integrację" i skłamie trenerowi, który ma ją
+    // włączoną.
+    expect(text).not.toMatch(/bot ma dołączyć/i);
   });
 
   it("gotowa notatka pokazuje treść z aiNotes", () => {
@@ -70,10 +84,16 @@ describe("AiNotesPanel — sześć stanów, sześć komunikatów", () => {
   // przy przeglądzie (drobne d1, fe-review.md) — nie mógł się zaczerwienić.
   // Nagłówek karty „AI Notetaker" (`ai-notes-panel.tsx:121–127`) renderuje
   // się ZAWSZE, więc `textOf(...)` nigdy nie jest pusty, nawet gdyby
-  // `renderBody` oddał pustkę dla wszystkich sześciu stanów — test w nazwie
+  // `renderBody` oddał pustkę dla wszystkich stanów — test w nazwie
   // obiecywał kompletność, a nie sprawdzał niczego, czego nie sprawdzają
   // testy wyżej. Prawdziwą bramką kompletności jest tu TYP:
   // `STATE_COPY: Record<Exclude<AiNotesState, "ready">, …>`
-  // (`ai-notes-panel.tsx:30`) nie skompiluje się, gdy kontrakt dołoży siódmy
+  // (`ai-notes-panel.tsx`) nie skompiluje się, gdy kontrakt dołoży kolejny
   // stan — silniejsza ochrona niż jakikolwiek test w tym pliku.
+  //
+  // **I dokładnie to się stało.** Klient `0.8.0` przyniósł siódmy stan,
+  // `not-booked`, a `npx tsc --noEmit` po podbiciu zapalił się na tym typie —
+  // jedyny błąd w całym drzewie. Zapisane tutaj, bo bramka, którą widziano
+  // czerwoną, przestaje być wiarą: ten akapit opisuje odtąd zdarzenie,
+  // nie przewidywanie.
 });
