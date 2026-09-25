@@ -2,8 +2,10 @@ import {
   calendarConnectionControllerAuthorize,
   calendarConnectionControllerDisconnect,
   calendarConnectionControllerGet,
+  calendarSyncFailuresControllerList,
+  calendarSyncFailuresControllerRetry,
 } from "@kalisthenos/api-client";
-import type { CalendarConnectionView } from "@kalisthenos/api-client";
+import type { CalendarConnectionView, CalendarSyncFailureView } from "@kalisthenos/api-client";
 import type { Api } from "~/lib/api/client";
 
 /**
@@ -52,6 +54,65 @@ export async function startCalendarAuthorization(api: Api): Promise<CalendarAuth
 
 export async function disconnectCalendar(api: Api): Promise<void> {
   await calendarConnectionControllerDisconnect({ client: api, throwOnError: true });
+}
+
+export async function listCalendarSyncFailures(api: Api): Promise<CalendarSyncFailureView[]> {
+  const { data } = await calendarSyncFailuresControllerList({ client: api, throwOnError: true });
+  return data;
+}
+
+export async function retryCalendarSyncFailure(api: Api, id: string): Promise<void> {
+  await calendarSyncFailuresControllerRetry({ client: api, path: { id }, throwOnError: true });
+}
+
+/**
+ * Czego system nie zdołał zrobić — dopełniacz, bo wchodzi po zaprzeczeniu
+ * („Nie udało się …").
+ *
+ * **`Record<string, …>` z gałęzią domyślną, nie `Record<Kind, …>`, i to jest
+ * wymóg kontraktu, nie ostrożność.** `kind` jest zadeklarowany jako
+ * `x-extensible-enum` (ADR-0042): zbiór ma rosnąć, a konsument jest zobowiązany
+ * obsłużyć wartość nieznaną. Mapa wyczerpująca kompilowałaby się dziś i pękała
+ * przy pierwszej nowej wartości — u użytkownika, nie u nas.
+ *
+ * Gałąź domyślna **nie zgaduje, o którą operację chodzi**. Zdanie ogólne jest
+ * prawdziwe dla każdej przyszłej wartości; zdanie konkretne byłoby prawdziwe
+ * dla trzech dzisiejszych i fałszywe dla czwartej.
+ */
+const SYNC_FAILURE_KIND_COPY: Record<string, string> = {
+  schedule: "wpisać terminu do kalendarza",
+  reschedule: "przenieść terminu na nową godzinę",
+  cancel: "usunąć odwołanego terminu z kalendarza",
+};
+
+export function syncFailureKindCopy(kind: string): string {
+  return SYNC_FAILURE_KIND_COPY[kind] ?? "wykonać zmiany tego terminu w kalendarzu";
+}
+
+/**
+ * Ostrzeżenie nad listą zaległości — albo `null`, gdy nie ma o czym ostrzegać.
+ *
+ * **Jedyny przypadek, w którym ponowienie kłamie.** Bez podłączonego kalendarza
+ * `CalendarSyncService` wychodzi na `credentials === null` i **nie robi nic**,
+ * a zdarzenie zostaje uznane za obsłużone — więc pozycja znika z listy, choć
+ * u dostawcy nic się nie wydarzyło. Przycisk wyglądałby wtedy jak sprzątanie,
+ * a był tylko kasowaniem dowodu.
+ *
+ * Trafia się tu częściej, niż wygląda: po błędzie `gone` rozłączenie jest
+ * jedyną drogą wyjścia (D-24), więc trener ląduje bez połączenia dokładnie
+ * wtedy, gdy zaległości jest najwięcej.
+ */
+export function syncFailuresNotice(
+  status: CalendarConnectionView["status"],
+  count: number,
+): string | null {
+  if (count === 0 || status !== "disconnected") return null;
+
+  return (
+    "Te wpisy powstały, gdy kalendarz był jeszcze podłączony. Bez połączenia ponowienie " +
+    "usunie je z listy, ale NIE zmieni niczego w Google — jeśli terminy nadal tam wiszą, " +
+    "połącz konto ponownie albo posprzątaj je ręcznie."
+  );
 }
 
 /** Co ekran integracji pokazuje dla danego stanu połączenia. */

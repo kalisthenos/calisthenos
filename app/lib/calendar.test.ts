@@ -11,6 +11,8 @@ import {
   disconnectCalendar,
   getCalendarConnection,
   startCalendarAuthorization,
+  syncFailureKindCopy,
+  syncFailuresNotice,
 } from "./calendar";
 
 function klient(reguly: (req: Request) => Response) {
@@ -147,5 +149,48 @@ describe("calendarConnectionCopy — trzy stany kontraktu, trzy różne ekrany",
     expect(calendarConnectionCopy("broken").pokazKonto).toBe(true);
     expect(calendarConnectionCopy("connected").pokazKonto).toBe(true);
     expect(calendarConnectionCopy("disconnected").pokazKonto).toBe(false);
+  });
+});
+
+describe("zaległości synchronizacji — D-26", () => {
+  it("nazywa trzy dzisiejsze rodzaje operacji", () => {
+    expect(syncFailureKindCopy("schedule")).toContain("wpisać");
+    expect(syncFailureKindCopy("reschedule")).toContain("przenieść");
+    expect(syncFailureKindCopy("cancel")).toContain("usunąć");
+  });
+
+  it("wartość NIEZNANA dostaje zdanie ogólne, nie pustkę i nie zgadywanie", () => {
+    // `kind` jest `x-extensible-enum` (ADR-0042): zbiór ma rosnąć, a konsument
+    // jest ZOBOWIĄZANY obsłużyć wartość nieznaną. To jest cały ten przypadek —
+    // mapa wyczerpująca skompilowałaby się dziś i pękła u użytkownika przy
+    // pierwszej nowej wartości, bo nowego enuma nie widać w typach, dopóki
+    // ktoś nie podbije klienta.
+    const zdanie = syncFailureKindCopy("odwolanie-serii");
+
+    expect(zdanie).not.toBe("");
+    // Gałąź domyślna NIE MOŻE twierdzić, o którą operację chodzi — zdanie
+    // konkretne byłoby prawdziwe dla trzech dzisiejszych wartości i fałszywe
+    // dla czwartej.
+    expect(zdanie).not.toMatch(/wpisać|przenieść|usunąć/);
+  });
+
+  it("bez połączenia ostrzega, że ponowienie NIE naprawi kalendarza", () => {
+    // Jedyny przypadek, w którym przycisk kłamie: `CalendarSyncService`
+    // wychodzi na `credentials === null` i nie robi nic, a zdarzenie zostaje
+    // uznane za obsłużone — pozycja znika z listy, choć w Google nic się nie
+    // wydarzyło. Trener ląduje tu częściej, niż wygląda: po błędzie `gone`
+    // rozłączenie jest jedyną drogą wyjścia (D-24).
+    const uwaga = syncFailuresNotice("disconnected", 2);
+
+    expect(uwaga).not.toBeNull();
+    expect(uwaga).toMatch(/nie zmieni niczego w Google/i);
+  });
+
+  it("milczy, gdy nie ma o czym ostrzegać", () => {
+    // Dwie strony granicy. Ostrzeżenie przy zdrowym połączeniu byłoby szumem,
+    // a przy pustej liście — ostrzeżeniem o niczym.
+    expect(syncFailuresNotice("connected", 2)).toBeNull();
+    expect(syncFailuresNotice("broken", 2)).toBeNull();
+    expect(syncFailuresNotice("disconnected", 0)).toBeNull();
   });
 });
