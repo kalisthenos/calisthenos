@@ -3,14 +3,14 @@ import { Link } from "react-router";
 import { Icons } from "~/components/icons";
 import {
   DEFAULT_METRICS,
+  type PyramidBandBox,
   VIEW_W,
   buildPyramid,
   layoutPyramid,
   orderAndPlace,
-  type PyramidBandBox,
 } from "~/lib/skill-pyramid";
 import { edgePathD, routeEdges } from "~/lib/skill-pyramid-routing";
-import { TIER_LABEL, highestEarnedTier, type SkillTier } from "~/lib/skill-tier";
+import { type SkillTier, TIER_LABEL, highestEarnedTier } from "~/lib/skill-tier";
 import type { SkillTree, TreeNode } from "~/lib/skill-tree";
 import type { NodeState } from "~/lib/skill-tree-math";
 

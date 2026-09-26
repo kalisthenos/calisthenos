@@ -1,20 +1,20 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
   useLoaderData,
   useNavigation,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { z } from "zod";
 import { CategoryPicker } from "~/components/exercise-fields";
 import { FileDropzone } from "~/components/file-dropzone";
 import { requireUser } from "~/lib/api/auth";
 import { filterToKnownCategoryNames, listCategoriesForTrainer } from "~/lib/categories";
-import { createExercise, type CreatedExercise } from "~/lib/exercises";
-import { maxUploadBytesFor, UploadError } from "~/lib/file-uploads";
+import { type CreatedExercise, createExercise } from "~/lib/exercises";
+import { UploadError, maxUploadBytesFor } from "~/lib/file-uploads";
 
 const ExerciseSchema = z.object({
   name: z.string().trim().min(1, "Nazwa jest wymagana.").max(120),

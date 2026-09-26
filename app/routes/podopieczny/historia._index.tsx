@@ -1,11 +1,11 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
-import { ListControls } from "~/components/list-controls";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { Icons } from "~/components/icons";
+import { ListControls } from "~/components/list-controls";
 import { Pagination, parsePage } from "~/components/pagination";
 import { requireUser } from "~/lib/api/auth";
-import { fmtDate, pluralizePl, type PlForms } from "~/lib/format";
-import { parseListControls, type ListControlsSpec } from "~/lib/list-params";
-import { listMyLogs, type LogSort, type VideoFilter } from "~/lib/workouts";
+import { type PlForms, fmtDate, pluralizePl } from "~/lib/format";
+import { type ListControlsSpec, parseListControls } from "~/lib/list-params";
+import { type LogSort, type VideoFilter, listMyLogs } from "~/lib/workouts";
 
 const SESJA: PlForms = { one: "sesja", few: "sesje", many: "sesji" };
 

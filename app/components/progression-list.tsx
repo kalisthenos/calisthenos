@@ -8,7 +8,7 @@ import {
   sparkStrokeForStatus,
 } from "~/components/progression-charts";
 import { Sparkline } from "~/components/stat-widgets";
-import { daysAgo, fmtDate, pluralizePl, type PlForms } from "~/lib/format";
+import { type PlForms, daysAgo, fmtDate, pluralizePl } from "~/lib/format";
 import type { ListControlsSpec, ListControlsState } from "~/lib/list-params";
 import type { ProgressionListRow } from "~/lib/progression-math";
 import { unitLabelPl } from "~/lib/progression-math";

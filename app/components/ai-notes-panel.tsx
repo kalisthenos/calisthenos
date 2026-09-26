@@ -26,6 +26,12 @@ const TONE_COLOR: Record<Tone, string> = {
  * `aiNotes`, patrz `renderBody`. Sześć stanów zamiast pojedynczej flagi
  * „jest/nie ma": cisza przy braku notatki jest defektem, który te komunikaty
  * mają zamknąć — trener ma się dowiedzieć DLACZEGO notatki nie ma.
+ *
+ * **Od `0.8.0` klienta jest ich siedem, a siódmy tej obietnicy nie spełnia.**
+ * `not-booked` mówi wyłącznie, że notatki nie będzie — przyczyny NIE niesie
+ * (`docs/04` §AI Notetaker). Doszedł, bo `scheduled` obiecywał bota także
+ * wtedy, gdy okno zlecenia dawno minęło; obietnica fałszywa jest gorsza niż
+ * odpowiedź niepełna, ale niepełna to nadal jest.
  */
 const STATE_COPY: Record<Exclude<AiNotesState, "ready">, { tone: Tone; message: string }> = {
   disabled: {
@@ -42,6 +48,20 @@ const STATE_COPY: Record<Exclude<AiNotesState, "ready">, { tone: Tone; message: 
     tone: "muted",
     message:
       "Bot ma dołączyć do tego spotkania. Notatka pojawi się tutaj automatycznie po jego zakończeniu.",
+  },
+  // Jedyny stan, który NIE umie odpowiedzieć na pytanie z docblocku wyżej —
+  // i jest to własność kontraktu, nie brak w tym komunikacie. `docs/04`
+  // §AI Notetaker mówi wprost: „nie mówi, CO go zatrzymało; mówi wyłącznie,
+  // że czekanie na notatkę nie ma sensu". Dopisanie tu przyczyny byłoby
+  // zgadywaniem, a komunikat, który zgaduje, myli się w cudzej sprawie.
+  //
+  // Stąd `warn`, nie `danger`: nic się nie zepsuło — bota po prostu nie
+  // zlecono, a bywa to stan całkowicie normalny (integracja wyłączona
+  // globalnie, termin poza zbiorem kwalifikujących się).
+  "not-booked": {
+    tone: "warn",
+    message:
+      "Spotkanie już się zaczęło, a bota nie zlecono — notatki dla tego terminu nie będzie. Ten stan nie rozróżnia przyczyn (wyłączona integracja, brak odnośnika w chwili startu, awaria dostawcy). Jeśli powtórzy się przy kolejnych terminach, zacznij od ekranu integracji.",
   },
   pending: {
     tone: "muted",

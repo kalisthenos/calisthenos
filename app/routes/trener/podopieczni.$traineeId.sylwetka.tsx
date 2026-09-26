@@ -1,13 +1,13 @@
 import { useMemo, useState } from "react";
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
-import { SideBySideSection, type ResolvedPair } from "~/components/body-photo-compare";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
+import { type ResolvedPair, SideBySideSection } from "~/components/body-photo-compare";
 import { PhotoCard } from "~/components/photo-card";
-import { PhotoLightbox, type LightboxPhoto } from "~/components/photo-lightbox";
+import { type LightboxPhoto, PhotoLightbox } from "~/components/photo-lightbox";
 import { requireUser } from "~/lib/api/auth";
 import {
+  type BodyPhotoView,
   getSideBySidePhotoPairs,
   listAllTraineeBodyPhotos,
-  type BodyPhotoView,
 } from "~/lib/body-photos";
 import { findTraineeRef } from "~/lib/trainees";
 

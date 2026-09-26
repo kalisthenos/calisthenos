@@ -1,6 +1,6 @@
 import { Link } from "react-router";
 import { Icons } from "~/components/icons";
-import { SegmentedBar, SegmentedBarLegend, type BarSegment } from "~/components/stat-widgets";
+import { type BarSegment, SegmentedBar, SegmentedBarLegend } from "~/components/stat-widgets";
 import { daysAgo } from "~/lib/format";
 // Kształty przeglądu klienta przychodzą z kontraktu (`stats.ts` je re-eksportuje).
 // Karta mapy aktywności zniknęła stąd razem z `getActivityHeatmap` — mapy nie ma

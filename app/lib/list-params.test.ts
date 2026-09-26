@@ -1,9 +1,5 @@
 import { describe, expect, it } from "vitest";
-import {
-  buildControlHref,
-  parseListControls,
-  type ListControlsSpec,
-} from "./list-params";
+import { type ListControlsSpec, buildControlHref, parseListControls } from "./list-params";
 
 const spec: ListControlsSpec = {
   sortOptions: [
@@ -47,10 +43,7 @@ describe("parseListControls", () => {
   });
 
   it("ignoruje q gdy lista nie jest searchable", () => {
-    const s = parseListControls(
-      new URLSearchParams("q=abc"),
-      { ...spec, searchable: false },
-    );
+    const s = parseListControls(new URLSearchParams("q=abc"), { ...spec, searchable: false });
     expect(s.q).toBe("");
   });
 });
@@ -58,24 +51,18 @@ describe("parseListControls", () => {
 describe("buildControlHref", () => {
   it("ustawia parametr i zawsze resetuje page", () => {
     const cur = new URLSearchParams("page=4&status=all&sort=newest");
-    expect(buildControlHref(cur, { sort: "name_asc" })).toBe(
-      "?status=all&sort=name_asc",
-    );
+    expect(buildControlHref(cur, { sort: "name_asc" })).toBe("?status=all&sort=name_asc");
   });
 
   it("usuwa parametr przy wartości null lub pustej i czyści page", () => {
-    expect(
-      buildControlHref(new URLSearchParams("status=active&page=2"), { status: null }),
-    ).toBe(".");
-    expect(
-      buildControlHref(new URLSearchParams("status=active&q=x"), { status: "" }),
-    ).toBe("?q=x");
+    expect(buildControlHref(new URLSearchParams("status=active&page=2"), { status: null })).toBe(
+      ".",
+    );
+    expect(buildControlHref(new URLSearchParams("status=active&q=x"), { status: "" })).toBe("?q=x");
   });
 
   it("zachowuje pozostałe parametry", () => {
     const cur = new URLSearchParams("q=pull&sort=newest");
-    expect(buildControlHref(cur, { status: "active" })).toBe(
-      "?q=pull&sort=newest&status=active",
-    );
+    expect(buildControlHref(cur, { status: "active" })).toBe("?q=pull&sort=newest&status=active");
   });
 });

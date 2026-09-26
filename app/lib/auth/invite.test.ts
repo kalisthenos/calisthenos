@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { createApiClient } from "../api/client";
 import { ApiError } from "../api/errors";
-import { createInvite, InviteError, previewInvite } from "./invite";
+import { InviteError, createInvite, previewInvite } from "./invite";
 
 // `Promise<Response>` w sygnaturze jest konieczne: przypadki niżej czytają ciało
 // żądania (`await req.json()`), więc reguła bywa funkcją asynchroniczną.

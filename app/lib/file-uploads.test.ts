@@ -9,8 +9,8 @@ vi.mock("~/lib/env", () => ({
 import { createApiClient } from "~/lib/api/client";
 import { ApiError } from "~/lib/api/errors";
 import {
-  maxUploadBytesFor,
   UploadError,
+  maxUploadBytesFor,
   uploadBodyPhoto,
   uploadExerciseDemo,
   uploadSetVideo,

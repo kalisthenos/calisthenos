@@ -2,8 +2,8 @@ import { existsSync } from "node:fs";
 import { mkdir } from "node:fs/promises";
 import path from "node:path";
 import { type Browser, chromium, devices } from "@playwright/test";
+import { type Role, parseShotArgs, selectTargets, slugForPath } from "./shots-lib";
 import { manifest } from "./shots.manifest";
-import { parseShotArgs, type Role, selectTargets, slugForPath } from "./shots-lib";
 
 const BASE_URL = process.env.BASE_URL ?? "http://localhost:3000";
 const OUT_DIR = "screenshots";
@@ -69,7 +69,9 @@ async function capture(browser: Browser, targetPath: string): Promise<string[]> 
     }
     const status = response?.status() ?? 0;
     if (status >= 400) {
-      console.warn(`[shots] ${targetPath}: serwer zwrócił ${status} — zrzut może być stroną błędu.`);
+      console.warn(
+        `[shots] ${targetPath}: serwer zwrócił ${status} — zrzut może być stroną błędu.`,
+      );
     }
 
     const file = path.join(OUT_DIR, `${slugForPath(targetPath)}__${vp.name}.png`);
@@ -91,9 +93,7 @@ async function main(): Promise<void> {
     process.exit(1);
   }
   for (const s of skipped) {
-    console.warn(
-      `[shots] Pomijam ${s.path} (rola ${s.role} — wymaga zaproszonego podopiecznego).`,
-    );
+    console.warn(`[shots] Pomijam ${s.path} (rola ${s.role} — wymaga zaproszonego podopiecznego).`);
   }
 
   // Jeśli trzeba się zalogować, sprawdź dane PRZED odpaleniem przeglądarki

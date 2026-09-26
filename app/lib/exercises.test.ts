@@ -18,8 +18,8 @@ vi.mock("~/lib/env", () => ({
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
-  createExercise,
   ExerciseError,
+  createExercise,
   getExerciseDetail,
   listActiveExercisesForTrainee,
   listActiveExercisesForTrainer,

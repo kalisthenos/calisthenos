@@ -7,7 +7,7 @@ import {
 import type { UploadResultDto } from "@kalisthenos/api-client";
 import type { Api } from "~/lib/api/client";
 import { ApiError } from "~/lib/api/errors";
-import { getEnv, type Env } from "~/lib/env";
+import { type Env, getEnv } from "~/lib/env";
 
 /**
  * Rodzaj pliku. Po przejściu wszystkich trzech ścieżek wysyłki na kontrakt służy

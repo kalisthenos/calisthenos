@@ -1,10 +1,10 @@
 import {
-  redirect,
+  type ActionFunctionArgs,
   Form,
+  type LoaderFunctionArgs,
+  redirect,
   useActionData,
   useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { z } from "zod";
 import { optionalUser } from "~/lib/api/auth";

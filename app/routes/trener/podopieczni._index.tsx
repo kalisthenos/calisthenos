@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react";
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   useActionData,
   useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { z } from "zod";
 import { CopyButton } from "~/components/copy-button";
@@ -19,10 +19,10 @@ import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { InviteError, createInvite } from "~/lib/auth";
 import { getEnv } from "~/lib/env";
 import { listActiveExercisesForTrainer } from "~/lib/exercises";
-import { daysAgo, pluralizePl, type PlForms } from "~/lib/format";
-import { parseListControls, type ListControlsSpec } from "~/lib/list-params";
+import { type PlForms, daysAgo, pluralizePl } from "~/lib/format";
+import { type ListControlsSpec, parseListControls } from "~/lib/list-params";
 import { OnboardingTemplateSchema } from "~/lib/onboarding-form-types";
-import { listClientsForTrainer, type ClientSort, type PlanFilter } from "~/lib/trainees";
+import { type ClientSort, type PlanFilter, listClientsForTrainer } from "~/lib/trainees";
 
 const OSOBA: PlForms = { one: "osoba", few: "osoby", many: "osób" };
 

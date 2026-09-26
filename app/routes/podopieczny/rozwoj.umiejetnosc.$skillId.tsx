@@ -1,4 +1,4 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { ExerciseProgressionPanel } from "~/components/exercise-progression-panel";
 import { VariationLadder } from "~/components/skill-tree";
 import { TierBadge } from "~/components/tier-badge";

@@ -2,11 +2,11 @@ import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
+  OnboardingFormError,
   getFormForTrainer,
   getFormStatusForTrainee,
   getPendingFormForTrainee,
   hasPendingOnboarding,
-  OnboardingFormError,
   submitOnboardingForm,
 } from "./onboarding-forms";
 

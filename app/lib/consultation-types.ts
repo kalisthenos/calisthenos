@@ -41,7 +41,7 @@ export const ScheduleFormSchema = z
     weekday: z.coerce.number().int().min(0).max(6).nullable().optional(),
     dayOfMonth: z.coerce.number().int().min(1).max(28).nullable().optional(),
     timeOfDay: timeString,
-    durationMin: z.coerce.number().int().positive().max(600),
+    durationMin: z.coerce.number().int().min(5, "Minimum 5 minut.").max(480, "Maksimum 480 minut."),
     startsOn: dateString,
     defaultMeetingUrl: meetingUrl.nullable().optional(),
   })
@@ -53,41 +53,55 @@ export type ScheduleForm = z.infer<typeof ScheduleFormSchema>;
 
 // ---------------- Dokumentacja / termin ad-hoc ----------------
 
-export const ConsultationDocFormSchema = z
-  .object({
-    scheduledAt: dateTimeLocal,
-    durationMin: z.coerce.number().int().positive().max(600).default(45),
-    meetingUrl: meetingUrl.nullable().optional(),
-    title: z.string().trim().min(1, "Tytuł jest wymagany.").max(160),
-    summary: z.string().max(10000).default(""),
-    periodFrom: dateString.nullable().optional(),
-    periodTo: dateString.nullable().optional(),
-    items: z.array(ActionItemFormSchema).max(50).default([]),
-  })
-  .refine((c) => (c.periodFrom == null) === (c.periodTo == null), {
-    message: "Podaj oba końce okresu albo żaden.",
-    path: ["periodTo"],
-  })
-  .refine((c) => c.periodFrom == null || c.periodTo == null || c.periodFrom <= c.periodTo, {
-    message: "Początek okresu nie może być po końcu.",
-    path: ["periodTo"],
-  });
+/**
+ * **Dokumentacja niesie DOKŁADNIE to, co przyjmuje `POST …/document`** — czyli
+ * podsumowanie i punkty. Nic więcej (D-FE-5).
+ *
+ * Do 2026-09-21 był tu jeden schemat na dwie różne operacje i zbierał pięć pól,
+ * których dokumentacja nie wysyła: termin, czas trwania, odnośnik, tytuł
+ * i okres. Formularz je pokazywał, Zod walidował, a moduł wyrzucał przed
+ * wysyłką — trener poprawiał link do spotkania, zapisywał i **nic się nie
+ * działo**. `title` i `periodFrom`/`periodTo` odpadły całkiem: kontrakt ich nie
+ * zna, tytuł nadaje serwer sam, a kolumny okresu są spadkiem po aplikacji
+ * fullstackowej, o którym `docs/04` milczy.
+ */
+export const ConsultationDocFormSchema = z.object({
+  summary: z.string().max(10000).default(""),
+  items: z.array(ActionItemFormSchema).max(50).default([]),
+});
 export type ConsultationDocForm = z.infer<typeof ConsultationDocFormSchema>;
+
+/**
+ * Termin poza serią — `POST /v1/consultations` przyjmuje TE pola, więc tu są
+ * żywe. Ten sam formularz, inny zestaw: różnicę niesie prop `tryb`
+ * komponentu, a nie domysł wykonawcy.
+ */
+export const AdhocConsultationFormSchema = ConsultationDocFormSchema.extend({
+  scheduledAt: dateTimeLocal,
+  durationMin: z.coerce
+    .number()
+    .int()
+    .min(5, "Minimum 5 minut.")
+    .max(480, "Maksimum 480 minut.")
+    .default(45),
+  meetingUrl: meetingUrl.nullable().optional(),
+});
+export type AdhocConsultationForm = z.infer<typeof AdhocConsultationFormSchema>;
 
 // ---------------- Akcja podopiecznego ----------------
 
 export const TraineeActionSchema = z.enum(["confirm", "decline", "request_change"]);
 export type TraineeAction = z.infer<typeof TraineeActionSchema>;
 
-// ---------------- Czyste guardy przejść (TDD) ----------------
-
-export function canTraineeAct(status: ConsultationStatus, _action: TraineeAction): boolean {
-  return status === "planned" || status === "confirmed";
-}
-export function canTrainerReschedule(status: ConsultationStatus): boolean {
-  return status === "planned" || status === "confirmed" || status === "change_requested";
-}
-export const canTrainerCancel = canTrainerReschedule;
-export function canDocument(status: ConsultationStatus): boolean {
-  return status !== "cancelled";
-}
+// ---------------- Tabela przejść: NIE MA JEJ TUTAJ ----------------
+//
+// Do 2026-09-21 stały tu cztery gwardie — `canTraineeAct`,
+// `canTrainerReschedule`, `canTrainerCancel` i `canDocument` — czyli druga
+// kopia tabeli przejść, po tej stronie szwu. Nie wołało ich już nic, ale miały
+// własne testy, więc wyglądały na żywe i zapraszały do użycia; przy tym
+// **każda z nich dopuszczała WIĘCEJ niż backend** (D-FE-4).
+//
+// Tabela przejść należy do kontraktu i przychodzi przy każdym terminie jako
+// `allowedActions`. Jeśli szukasz tu odpowiedzi „czy wolno przełożyć" —
+// odpowiedź jest w `termin.allowedActions`, a nie w funkcji, którą trzeba
+// pamiętać, żeby zaktualizować.

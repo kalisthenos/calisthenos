@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
 import {
+  SkillError,
   addPrerequisite,
   addVariation,
   archiveSkill,
@@ -11,7 +12,6 @@ import {
   removePrerequisite,
   removeVariation,
   reorderVariations,
-  SkillError,
   updateSkill,
 } from "./skills";
 

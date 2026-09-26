@@ -8,17 +8,12 @@ export function parseConsultationDocFormData(fd: FormData) {
   const items = bodies
     .map((body, i) => ({ body, status: statuses[i] === "resolved" ? "resolved" : "open" }))
     .filter((it) => it.body.trim().length > 0);
-  const periodFrom = String(fd.get("periodFrom") ?? "").trim() || null;
-  const periodTo = String(fd.get("periodTo") ?? "").trim() || null;
   const meetingUrl = String(fd.get("meetingUrl") ?? "").trim() || null;
   return {
     scheduledAt: String(fd.get("scheduledAt") ?? ""),
     durationMin: String(fd.get("durationMin") ?? "45"),
     meetingUrl,
-    title: String(fd.get("title") ?? ""),
     summary: String(fd.get("summary") ?? ""),
-    periodFrom,
-    periodTo,
     items,
   };
 }

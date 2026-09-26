@@ -1,11 +1,11 @@
 import {
+  type ButtonHTMLAttributes,
+  type ReactNode,
   createContext,
   useCallback,
   useContext,
   useRef,
   useState,
-  type ButtonHTMLAttributes,
-  type ReactNode,
 } from "react";
 import { Modal } from "./modal";
 

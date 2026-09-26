@@ -1,3 +1,4 @@
+import type { CalendarConnectionView, CalendarSyncFailureView } from "@kalisthenos/api-client";
 import {
   type ActionFunctionArgs,
   Form,
@@ -10,14 +11,27 @@ import {
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import {
+  calendarConnectionCopy,
   disconnectCalendar,
   getCalendarConnection,
+  listCalendarSyncFailures,
+  retryCalendarSyncFailure,
   startCalendarAuthorization,
+  syncFailureKindCopy,
+  syncFailuresNotice,
 } from "~/lib/calendar";
+import { fmtDateTime } from "~/lib/format";
 
 export async function loader(args: LoaderFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainer" });
-  return { connection: await getCalendarConnection(api) };
+  // Równolegle, bo to dwa niezależne odczyty. Lista zaległości NIE zależy od
+  // stanu połączenia — czyta outbox po trenerze — więc trener rozłączony wciąż
+  // musi zobaczyć, co po sobie zostawił.
+  const [connection, syncFailures] = await Promise.all([
+    getCalendarConnection(api),
+    listCalendarSyncFailures(api),
+  ]);
+  return { connection, syncFailures };
 }
 
 export async function action(args: ActionFunctionArgs) {
@@ -39,12 +53,28 @@ export async function action(args: ActionFunctionArgs) {
       await disconnectCalendar(api);
       return { success: "Konto Google odłączone." };
     }
+    if (intent === "retry") {
+      const id = fd.get("id");
+      if (typeof id !== "string" || id === "") return { error: "Brak wskazania zaległości." };
+      await retryCalendarSyncFailure(api, id);
+      // Świadomie NIE „gotowe". Kontrakt oddaje `204`, bo dostarczenie jest
+      // asynchroniczne — pozycja znika z listy, bo wróciła do kolejki, a nie
+      // dlatego, że kalendarz już ją przyjął. Gdy się znów nie uda, wróci.
+      return { success: "Ponowienie przyjęte. Jeśli znów się nie uda, wpis wróci na tę listę." };
+    }
     return null;
   } catch (e) {
     // `409` to wyłączona integracja na serwerze. `message` z kontraktu jest
     // już po polsku i dla użytkownika, więc idzie na ekran bez tłumaczenia —
     // a granica błędu pokazałaby zamiast tego zupełnie inny ekran.
     if (e instanceof ApiError && e.status === 409) return { error: e.message };
+    // `404` przy ponowieniu znaczy „tej zaległości już nie ma na liście":
+    // ktoś kliknął dwa razy albo lista jest nieodświeżona. To nie jest awaria
+    // ekranu — granica błędu wyrzuciłaby trenera z widoku za podwójne
+    // kliknięcie, a wystarczy powiedzieć mu, co się stało.
+    if (e instanceof ApiError && e.status === 404 && intent === "retry") {
+      return { error: "Tej zaległości już nie ma na liście — odśwież widok." };
+    }
     if (e instanceof ApiError) throw toRouteResponse(e);
     throw e;
   }
@@ -57,7 +87,7 @@ const ERROR_MESSAGES: Record<string, string> = {
 };
 
 export default function IntegracjeGoogle() {
-  const { connection } = useLoaderData<typeof loader>();
+  const { connection, syncFailures } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
   const [searchParams] = useSearchParams();
 
@@ -66,10 +96,11 @@ export default function IntegracjeGoogle() {
   const okParam = calendarParam === "ok";
   const errorParam = calendarParam === "error" ? searchParams.get("reason") : null;
 
-  // `broken` to jest połączenie — zepsute, ale istniejące, a jedyną drogą
-  // wyjścia z niego jest „Rozłącz". Ten sam podział, co przed integracją,
-  // gdzie decydowała obecność wiersza.
-  const polaczone = connection.status !== "disconnected";
+  // TRZY stany kontraktu, nie dwa. Do D-FE-2 stało tu `status !==
+  // "disconnected"`, przez co `broken` wyglądał identycznie jak `connected`
+  // i trener czytał „Połączone konto", gdy nic się nie synchronizowało.
+  // Reguła mieszka w module, bo tylko tam da się jej dowieść testem.
+  const stan = calendarConnectionCopy(connection.status);
 
   return (
     <div>
@@ -112,32 +143,138 @@ export default function IntegracjeGoogle() {
 
         <h2 style={{ fontSize: 17, margin: "0 0 12px" }}>Google Calendar</h2>
 
-        {polaczone ? (
-          <div>
-            <p style={{ margin: "0 0 16px" }}>
-              Połączone konto: <strong>{connection.accountLabel ?? "(połączone)"}</strong>
-            </p>
+        {stan.ostrzezenie && (
+          <div className="alert alert-error" style={{ marginBottom: 16 }}>
+            {stan.ostrzezenie}
+          </div>
+        )}
+
+        {stan.pokazKonto ? (
+          <p style={{ margin: "0 0 16px" }}>
+            Połączone konto: <strong>{connection.accountLabel ?? "(połączone)"}</strong>
+          </p>
+        ) : (
+          <p className="muted" style={{ margin: "0 0 16px" }}>
+            Brak połączonego konta Google. Kliknij poniżej, aby autoryzować dostęp do kalendarza.
+          </p>
+        )}
+
+        <div className="row" style={{ gap: 8 }}>
+          {/* Zgoda: przy `broken` jako „ponownie", przy braku konta jako pierwsza. */}
+          {(stan.polaczOdNowa || !stan.pokazKonto) && (
+            <Form method="post">
+              <input type="hidden" name="intent" value="connect" />
+              <button type="submit" className="btn btn-primary">
+                {stan.polaczOdNowa ? "Połącz ponownie" : "Połącz z Google"}
+              </button>
+            </Form>
+          )}
+          {stan.mozliwoscRozlaczenia && (
             <Form method="post">
               <input type="hidden" name="intent" value="disconnect" />
               <button type="submit" className="btn btn-ghost" style={{ color: "var(--danger)" }}>
                 Rozłącz
               </button>
             </Form>
-          </div>
-        ) : (
-          <div>
-            <p className="muted" style={{ margin: "0 0 16px" }}>
-              Brak połączonego konta Google. Kliknij poniżej, aby autoryzować dostęp do kalendarza.
-            </p>
-            <Form method="post">
-              <input type="hidden" name="intent" value="connect" />
-              <button type="submit" className="btn btn-primary">
-                Połącz z Google
-              </button>
-            </Form>
-          </div>
-        )}
+          )}
+        </div>
       </div>
+
+      <SekcjaZaleglosci status={connection.status} pozycje={syncFailures} />
+    </div>
+  );
+}
+
+/**
+ * Zaległości synchronizacji — D-26.
+ *
+ * Do 2026-09-24 zdarzenie terminu, którego nie udało się dostarczyć do
+ * kalendarza, kończyło się **linijką w logu workera** i niczym więcej. Żaden
+ * ekran o tym nie mówił, a `GET /v1/calendar/connection` pokazywał przy tym
+ * `connected` — i słusznie, bo połączenie było zdrowe; zawiodło pojedyncze
+ * zdarzenie. Skutek widziała dopiero podopieczna, przychodząc na spotkanie
+ * odwołane tydzień wcześniej.
+ *
+ * **Odbiorcą jest trener** — jedyna osoba, która ma co z tym zrobić.
+ *
+ * **Stan pusty mówi wprost, że jest pusty, i to jest decyzja.** Sekcja, która
+ * przy zerze znika bez śladu, nie odróżnia „sprawdziliśmy, nic nie ma" od
+ * „nikt nie sprawdzał" — a domykamy tu defekt, którego objawem była dokładnie
+ * ta nierozróżnialność.
+ */
+function SekcjaZaleglosci({
+  status,
+  pozycje,
+}: {
+  status: CalendarConnectionView["status"];
+  pozycje: CalendarSyncFailureView[];
+}) {
+  const uwaga = syncFailuresNotice(status, pozycje.length);
+
+  return (
+    <div className="card" style={{ maxWidth: 560, marginTop: 16 }}>
+      <h2 style={{ fontSize: 17, margin: "0 0 12px" }}>
+        Zaległości synchronizacji
+        {pozycje.length > 0 && ` (${pozycje.length})`}
+      </h2>
+
+      {pozycje.length === 0 ? (
+        <p className="muted" style={{ margin: 0 }}>
+          Brak zaległości — wszystko, co zmieniałeś, trafiło do kalendarza.
+        </p>
+      ) : (
+        <>
+          <p className="muted" style={{ margin: "0 0 12px" }}>
+            Tych zmian system nie zdołał wykonać w Twoim kalendarzu mimo dziesięciu prób. Ponów albo
+            popraw wpis ręcznie w Google.
+          </p>
+
+          {uwaga && (
+            <div className="alert alert-error" style={{ marginBottom: 12 }}>
+              {uwaga}
+            </div>
+          )}
+
+          <ul style={{ listStyle: "none", margin: 0, padding: 0 }}>
+            {pozycje.map((p) => (
+              <li
+                key={p.id}
+                className="row"
+                style={{
+                  justifyContent: "space-between",
+                  alignItems: "flex-start",
+                  gap: 12,
+                  padding: "10px 0",
+                  borderTop: "1px solid var(--border)",
+                }}
+              >
+                <div>
+                  <div style={{ fontSize: 14 }}>Nie udało się {syncFailureKindCopy(p.kind)}.</div>
+                  <div className="muted" style={{ fontSize: 13, marginTop: 2 }}>
+                    Spotkanie {fmtDateTime(p.scheduledAt)}
+                    {" · "}
+                    {/* `null` znaczy „podopiecznego już nie da się ustalić" —
+                        cisza w tym miejscu czytałaby się jak brak podopiecznego
+                        w ogóle, a trener szuka po niej wpisu w Google. */}
+                    {p.traineeName ?? "podopieczny nieustalony"}
+                  </div>
+                  <div className="muted" style={{ fontSize: 12, marginTop: 2 }}>
+                    Nie udaje się od {fmtDateTime(p.failedAt)}
+                  </div>
+                </div>
+
+                <Form method="post">
+                  <input type="hidden" name="intent" value="retry" />
+                  <input type="hidden" name="id" value={p.id} />
+                  <button type="submit" className="btn btn-ghost">
+                    Ponów
+                  </button>
+                </Form>
+              </li>
+            ))}
+          </ul>
+        </>
+      )}
     </div>
   );
 }

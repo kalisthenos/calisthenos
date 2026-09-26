@@ -1,4 +1,4 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { ComparisonChart, ComparisonChartLegend } from "~/components/progression-charts";
 import { requireUser } from "~/lib/api/auth";
 import { comparisonSkipReasonLabel, loadMyProgressionComparison } from "~/lib/progression";

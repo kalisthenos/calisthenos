@@ -1,12 +1,12 @@
 import { describe, expect, it } from "vitest";
 import {
   DEFAULT_METRICS,
+  type PyramidMetrics,
+  type PyramidNodeInput,
   VIEW_W,
   buildPyramid,
   layoutPyramid,
   orderAndPlace,
-  type PyramidMetrics,
-  type PyramidNodeInput,
 } from "./skill-pyramid";
 import type { Edge } from "./skill-tree-math";
 

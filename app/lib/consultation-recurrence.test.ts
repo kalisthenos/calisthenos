@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { nextOccurrences, type RecurrenceRule } from "~/lib/consultation-recurrence";
+import { type RecurrenceRule, nextOccurrences } from "~/lib/consultation-recurrence";
 
 // 2026-06-01 to poniedziałek; środa = 2026-06-03.
 const weekly: RecurrenceRule = {

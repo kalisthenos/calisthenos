@@ -1,7 +1,7 @@
-import { redirect } from "react-router";
-import type { RouterContextProvider } from "react-router";
 import { authControllerRefresh, meControllerMe } from "@kalisthenos/api-client";
 import type { MeDto } from "@kalisthenos/api-client";
+import { redirect } from "react-router";
+import type { RouterContextProvider } from "react-router";
 import { getEnv } from "~/lib/env";
 import { type Api, createApiClient } from "./client";
 import { type AuthUser, apiContext } from "./context";

@@ -10,9 +10,6 @@ export interface ConsultationFormDefaultValue {
   scheduledAt: string;
   durationMin?: number;
   meetingUrl?: string | null;
-  periodFrom?: string | null;
-  periodTo?: string | null;
-  title: string;
   summary: string;
   items: ConsultationFormItem[];
 }
@@ -21,6 +18,18 @@ interface ConsultationFormProps {
   defaultValue?: ConsultationFormDefaultValue;
   /** Domyślny moment spotkania (datetime-local "YYYY-MM-DDTHH:MM"). */
   defaultScheduledAt?: string;
+  /**
+   * **Które pola ten formularz naprawdę wyśle** (D-FE-5).
+   *
+   * `dokumentacja` woła `POST /v1/consultations/{id}/document`, a to DTO niesie
+   * wyłącznie podsumowanie i punkty — termin, czas trwania i odnośnik zmienia
+   * osobna operacja (`reschedule`). Do 2026-09-21 formularz pokazywał je mimo
+   * to, przyjmował edycję i **cicho ją gubił**: trener poprawiał link do
+   * spotkania, zapisywał i nic się nie działo.
+   *
+   * `nowy` woła `POST /v1/consultations`, które te pola niesie — tam są żywe.
+   */
+  tryb?: "nowy" | "dokumentacja";
 }
 
 /**
@@ -28,7 +37,12 @@ interface ConsultationFormProps {
  * Nie renderuje własnego <Form> — rodzic owija go w <Form method="post">
  * i dodaje własny przycisk submit + hidden intent.
  */
-export function ConsultationForm({ defaultValue, defaultScheduledAt }: ConsultationFormProps) {
+export function ConsultationForm({
+  defaultValue,
+  defaultScheduledAt,
+  tryb = "nowy",
+}: ConsultationFormProps) {
+  const terminEdytowalny = tryb === "nowy";
   const [items, setItems] = useState<ConsultationFormItem[]>(defaultValue?.items ?? []);
 
   function addItem() {
@@ -44,109 +58,60 @@ export function ConsultationForm({ defaultValue, defaultScheduledAt }: Consultat
   }
 
   const scheduledAtDefault = defaultValue?.scheduledAt ?? defaultScheduledAt ?? "";
-  const periodFromDefault = defaultValue?.periodFrom ?? "";
-  const periodToDefault = defaultValue?.periodTo ?? "";
 
   return (
     <div style={{ display: "flex", flexDirection: "column", gap: 18 }}>
-      {/* Termin spotkania + czas trwania */}
-      <div
-        style={{
-          display: "grid",
-          gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-          gap: 12,
-          maxWidth: 460,
-        }}
-      >
-        <div className="field">
-          <label htmlFor="cf-scheduledAt">Termin spotkania</label>
-          <input
-            id="cf-scheduledAt"
-            className="input"
-            type="datetime-local"
-            name="scheduledAt"
-            required
-            defaultValue={scheduledAtDefault}
-          />
-        </div>
-        <div className="field">
-          <label htmlFor="cf-durationMin">Czas trwania (min)</label>
-          <input
-            id="cf-durationMin"
-            className="input"
-            type="number"
-            name="durationMin"
-            min={1}
-            max={600}
-            defaultValue={defaultValue?.durationMin ?? 45}
-          />
-        </div>
-      </div>
+      {terminEdytowalny && (
+        <>
+          {/* Termin spotkania + czas trwania */}
+          <div
+            style={{
+              display: "grid",
+              gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
+              gap: 12,
+              maxWidth: 460,
+            }}
+          >
+            <div className="field">
+              <label htmlFor="cf-scheduledAt">Termin spotkania</label>
+              <input
+                id="cf-scheduledAt"
+                className="input"
+                type="datetime-local"
+                name="scheduledAt"
+                required
+                defaultValue={scheduledAtDefault}
+              />
+            </div>
+            <div className="field">
+              <label htmlFor="cf-durationMin">Czas trwania (min)</label>
+              <input
+                id="cf-durationMin"
+                className="input"
+                type="number"
+                name="durationMin"
+                min={1}
+                max={600}
+                defaultValue={defaultValue?.durationMin ?? 45}
+              />
+            </div>
+          </div>
 
-      {/* Link spotkania */}
-      <div className="field">
-        <label htmlFor="cf-meetingUrl">Link spotkania (opcjonalnie)</label>
-        <input
-          id="cf-meetingUrl"
-          className="input"
-          type="url"
-          name="meetingUrl"
-          maxLength={500}
-          defaultValue={defaultValue?.meetingUrl ?? ""}
-          placeholder="https://meet.google.com/…"
-        />
-      </div>
-
-      {/* Okres — od / do */}
-      <div>
-        <div className="field-label" style={{ marginBottom: 8 }}>
-          Okres (opcjonalnie)
-        </div>
-        <div
-          style={{
-            display: "grid",
-            gridTemplateColumns: "repeat(auto-fit, minmax(180px, 1fr))",
-            gap: 12,
-            maxWidth: 460,
-          }}
-        >
+          {/* Link spotkania */}
           <div className="field">
-            <label htmlFor="cf-periodFrom">Okres od</label>
+            <label htmlFor="cf-meetingUrl">Link spotkania (opcjonalnie)</label>
             <input
-              id="cf-periodFrom"
+              id="cf-meetingUrl"
               className="input"
-              type="date"
-              name="periodFrom"
-              defaultValue={periodFromDefault}
+              type="url"
+              name="meetingUrl"
+              maxLength={500}
+              defaultValue={defaultValue?.meetingUrl ?? ""}
+              placeholder="https://meet.google.com/…"
             />
           </div>
-          <div className="field">
-            <label htmlFor="cf-periodTo">Okres do</label>
-            <input
-              id="cf-periodTo"
-              className="input"
-              type="date"
-              name="periodTo"
-              defaultValue={periodToDefault}
-            />
-          </div>
-        </div>
-      </div>
-
-      {/* Tytuł */}
-      <div className="field">
-        <label htmlFor="cf-title">Tytuł</label>
-        <input
-          id="cf-title"
-          className="input"
-          type="text"
-          name="title"
-          required
-          maxLength={160}
-          defaultValue={defaultValue?.title ?? ""}
-          placeholder="np. Konsultacja miesięczna — maj 2026"
-        />
-      </div>
+        </>
+      )}
 
       {/* Podsumowanie */}
       <div className="field">

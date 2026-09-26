@@ -32,8 +32,32 @@ function scenariusz(odpowiedz: (req: Request) => Response) {
   return context;
 }
 
-function formularz(intent: string): Request {
-  const body = new URLSearchParams({ intent });
+/**
+ * Atrapa rozróżniająca DWIE trasy, które loader czyta od 2026-09-25.
+ *
+ * Bez rozróżnienia atrapa oddawałaby obiekt połączenia także na
+ * `GET /v1/calendar/sync-failures`, a `syncFailures` przestałby być tablicą
+ * **w sposób niewidoczny** dla asercji o połączeniu — ekran wywróciłby się
+ * dopiero w przeglądarce, na `pozycje.length`.
+ */
+function odpowiedzi(o: { polaczenie: unknown; zaleglosci?: unknown }) {
+  return (req: Request): Response => {
+    const json = (v: unknown) =>
+      new Response(JSON.stringify(v), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      });
+
+    return new URL(req.url).pathname.includes("/sync-failures")
+      ? json(o.zaleglosci ?? [])
+      : json(o.polaczenie);
+  };
+}
+
+const POLACZONE = { status: "connected", provider: "google", accountLabel: "a@b.pl" };
+
+function formularz(intent: string, pola: Record<string, string> = {}): Request {
+  const body = new URLSearchParams({ intent, ...pola });
   return new Request("https://fe.test/trener/integracje/google", {
     method: "POST",
     body,
@@ -43,21 +67,48 @@ function formularz(intent: string): Request {
 
 describe("integracje.google — ekran na kontrakcie", () => {
   it("loader oddaje stan połączenia z kontraktu", async () => {
+    const context = scenariusz(odpowiedzi({ polaczenie: POLACZONE }));
+
+    const wynik = (await loader({
+      request: new Request("https://fe.test/trener/integracje/google"),
+      params: {},
+      context,
+    } as never)) as { connection: { accountLabel: string | null }; syncFailures: unknown[] };
+
+    expect(wynik.connection.accountLabel).toBe("a@b.pl");
+    // Zaległości jadą tym samym loaderem i MUSZĄ być tablicą także wtedy, gdy
+    // nie ma ani jednej — ekran liczy na nich `length`.
+    expect(wynik.syncFailures).toEqual([]);
+  });
+
+  it("loader oddaje zaległości OBOK połączenia, nie zamiast niego", async () => {
+    // Dwa niezależne odczyty w jednym loaderze. Lista NIE zależy od stanu
+    // połączenia — czyta outbox po trenerze — więc trener rozłączony wciąż
+    // musi zobaczyć, co po sobie zostawił (D-24: po błędzie `gone` rozłączenie
+    // jest jedyną drogą wyjścia, czyli ląduje tu z największą zaległością).
     const context = scenariusz(
-      () =>
-        new Response(
-          JSON.stringify({ status: "connected", provider: "google", accountLabel: "a@b.pl" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
+      odpowiedzi({
+        polaczenie: { status: "disconnected", provider: "google", accountLabel: null },
+        zaleglosci: [
+          {
+            id: "z-1",
+            kind: "cancel",
+            scheduledAt: "2026-09-24T10:00:00.000Z",
+            failedAt: "2026-09-24T08:00:00.000Z",
+            traineeName: "Ala",
+          },
+        ],
+      }),
     );
 
     const wynik = (await loader({
       request: new Request("https://fe.test/trener/integracje/google"),
       params: {},
       context,
-    } as never)) as { connection: { accountLabel: string | null } };
+    } as never)) as { connection: { status: string }; syncFailures: { id: string }[] };
 
-    expect(wynik.connection.accountLabel).toBe("a@b.pl");
+    expect(wynik.connection.status).toBe("disconnected");
+    expect(wynik.syncFailures.map((z) => z.id)).toEqual(["z-1"]);
   });
 
   it("loader oddaje stan `broken` nietknięty — to jest połączenie, nie awaria", async () => {
@@ -70,11 +121,9 @@ describe("integracje.google — ekran na kontrakcie", () => {
     // przeszłaby cały ten plik i zostawiła trenera z zepsutym połączeniem
     // bez żadnego sposobu, żeby je usunąć.
     const context = scenariusz(
-      () =>
-        new Response(
-          JSON.stringify({ status: "broken", provider: "google", accountLabel: "a@b.pl" }),
-          { status: 200, headers: { "content-type": "application/json" } },
-        ),
+      odpowiedzi({
+        polaczenie: { status: "broken", provider: "google", accountLabel: "a@b.pl" },
+      }),
     );
 
     const wynik = (await loader({
@@ -154,5 +203,67 @@ describe("integracje.google — ekran na kontrakcie", () => {
 
     expect(metoda).toBe("DELETE");
     expect(wynik.success).toContain("odłączone");
+  });
+
+  it("Ponów trafia pod adres TEJ zaległości i nie obiecuje dostarczenia", async () => {
+    let trafiony = "";
+    let metoda = "";
+    const context = scenariusz((req) => {
+      trafiony = new URL(req.url).pathname;
+      metoda = req.method;
+      return new Response(null, { status: 204 });
+    });
+
+    const wynik = (await action({
+      request: formularz("retry", { id: "z-1" }),
+      params: {},
+      context,
+    } as never)) as { success: string };
+
+    expect(metoda).toBe("POST");
+    expect(trafiony).toBe("/v1/calendar/sync-failures/z-1/retry");
+    // Kontrakt oddaje `204`, bo dostarczenie jest ASYNCHRONICZNE. Komunikat
+    // mówiący „gotowe" kłamałby dokładnie w tym miejscu — pozycja znika
+    // z listy, bo wróciła do kolejki, a nie dlatego, że kalendarz ją przyjął.
+    expect(wynik.success).not.toMatch(/gotowe|dostarczon|zsynchronizowan/i);
+    expect(wynik.success).toMatch(/wróci/i);
+  });
+
+  it("ponowienie bez wskazania zaległości nie idzie do backendu", async () => {
+    let wolano = false;
+    const context = scenariusz(() => {
+      wolano = true;
+      return new Response(null, { status: 204 });
+    });
+
+    const wynik = (await action({
+      request: formularz("retry"),
+      params: {},
+      context,
+    } as never)) as { error: string };
+
+    expect(wolano).toBe(false);
+    expect(wynik.error).toContain("Brak wskazania");
+  });
+
+  it("404 przy ponowieniu NIE wywraca ekranu", async () => {
+    // Podwójne kliknięcie albo nieodświeżona lista. Bez tej gałęzi
+    // `toRouteResponse` wyrzuciłby trenera do granicy błędu za czynność,
+    // która w najgorszym razie była zbędna.
+    const context = scenariusz(
+      () =>
+        new Response(JSON.stringify({ error: { code: "NOT_FOUND", message: "Nie znaleziono." } }), {
+          status: 404,
+          headers: { "content-type": "application/json" },
+        }),
+    );
+
+    const wynik = (await action({
+      request: formularz("retry", { id: "z-1" }),
+      params: {},
+      context,
+    } as never)) as { error: string };
+
+    expect(wynik.error).toContain("już nie ma na liście");
   });
 });

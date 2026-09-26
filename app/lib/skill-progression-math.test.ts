@@ -1,10 +1,10 @@
-import { describe, it, expect } from "vitest";
+import { describe, expect, it } from "vitest";
 import {
-  currentLevelFromEvents,
-  HIGH_RPE,
-  suggestAdvancement,
-  type AdvancementEvent,
   type AdvanceSignals,
+  type AdvancementEvent,
+  HIGH_RPE,
+  currentLevelFromEvents,
+  suggestAdvancement,
 } from "./skill-progression-math";
 
 const ev = (
@@ -78,7 +78,9 @@ describe("suggestAdvancement", () => {
     expect(suggestAdvancement(sig({ status: "up", recentAvgRpe: null }))).toBe("advance");
   });
   it("does NOT regress with no lower variant", () => {
-    expect(suggestAdvancement(sig({ status: "down", recentAvgRpe: 9, hasLowerVariant: false }))).toBeNull();
+    expect(
+      suggestAdvancement(sig({ status: "down", recentAvgRpe: 9, hasLowerVariant: false })),
+    ).toBeNull();
   });
   it("returns null for a flat, unremarkable signal", () => {
     expect(suggestAdvancement(sig({}))).toBeNull();

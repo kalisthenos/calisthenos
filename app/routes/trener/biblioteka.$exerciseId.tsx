@@ -1,16 +1,18 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
   useLoaderData,
   useNavigation,
   useSearchParams,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { z } from "zod";
 import { ConfirmSubmitButton } from "~/components/confirm-provider";
+import { CategoryPicker } from "~/components/exercise-fields";
+import { FileDropzone } from "~/components/file-dropzone";
 import { Icons } from "~/components/icons";
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
@@ -21,9 +23,7 @@ import {
   setExerciseArchived,
   updateExercise,
 } from "~/lib/exercises";
-import { maxUploadBytesFor, UploadError } from "~/lib/file-uploads";
-import { CategoryPicker } from "~/components/exercise-fields";
-import { FileDropzone } from "~/components/file-dropzone";
+import { UploadError, maxUploadBytesFor } from "~/lib/file-uploads";
 
 const EditSchema = z.object({
   name: z.string().trim().min(1, "Nazwa jest wymagana.").max(120),
@@ -253,9 +253,7 @@ export default function EdytujCwiczenie() {
           idSuffix="edit"
           kind="video"
           label={
-            exercise.demoUrl != null
-              ? "Zastąp wideo demo (opcjonalne)"
-              : "Wideo demo (opcjonalne)"
+            exercise.demoUrl != null ? "Zastąp wideo demo (opcjonalne)" : "Wideo demo (opcjonalne)"
           }
           maxBytes={maxVideoBytes}
         />

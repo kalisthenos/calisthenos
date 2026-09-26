@@ -3,8 +3,12 @@ import { type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { ConsultationRow } from "~/components/consultation-row";
 import { type DaySummary, MonthCalendar } from "~/components/month-calendar";
 import { requireUser } from "~/lib/api/auth";
-import { consultationPresentation, mostUrgentTone } from "~/lib/consultation-status";
-import { type ConsultationView, listOccurrencesInRange } from "~/lib/consultations";
+import { mostUrgentTone, presentationFor } from "~/lib/consultation-status";
+import {
+  type ConsultationView,
+  appWallClockNow,
+  listOccurrencesInRange,
+} from "~/lib/consultations";
 import { fmtTime, monthRangeUTC, shiftMonth, todayISO } from "~/lib/format";
 
 export async function loader(args: LoaderFunctionArgs) {
@@ -20,7 +24,9 @@ export async function loader(args: LoaderFunctionArgs) {
 
 export default function TrenerKonsultacjeKalendarz() {
   const { occurrences, m, year, month0, today } = useLoaderData<typeof loader>();
-  const now = Date.now();
+  // `scheduledAt` przychodzi z modułu w konwencji czasu ŚCIENNEGO, więc „teraz"
+  // musi być w tej samej — `Date.now()` myliłby się o offset strefy (D-FE-3).
+  const now = appWallClockNow();
 
   // Grupuj po dniu miesiąca (UTC).
   const byDay = new Map<number, ConsultationView[]>();
@@ -34,15 +40,7 @@ export default function TrenerKonsultacjeKalendarz() {
   // Podsumowanie per dzień dla kalendarza (kolor = najważniejszy ton).
   const days = new Map<number, DaySummary>();
   for (const [day, occs] of byDay) {
-    const tones = occs.map(
-      (o) =>
-        consultationPresentation({
-          status: o.status,
-          scheduledAtISO: o.scheduledAt,
-          nowMs: now,
-          viewer: "trainer",
-        }).tone,
-    );
+    const tones = occs.map((o) => presentationFor(o.presentation).tone);
     const tone = mostUrgentTone(tones);
     if (tone) days.set(day, { tone, count: occs.length });
   }
@@ -82,12 +80,7 @@ export default function TrenerKonsultacjeKalendarz() {
           {selectedOccs.length > 0 ? (
             <div className="list">
               {selectedOccs.map((o) => {
-                const meta = consultationPresentation({
-                  status: o.status,
-                  scheduledAtISO: o.scheduledAt,
-                  nowMs: now,
-                  viewer: "trainer",
-                });
+                const meta = presentationFor(o.presentation);
                 return (
                   <ConsultationRow
                     key={o.id}

@@ -1,7 +1,7 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
-  type ActionFunctionArgs,
   type LoaderFunctionArgs,
   redirect,
   useActionData,
@@ -16,12 +16,13 @@ import { StatusBadge } from "~/components/consultation-status-badge";
 import { Icons } from "~/components/icons";
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
-import { defaultTitle } from "~/lib/consultation-schedules";
-import { consultationPresentation } from "~/lib/consultation-status";
 import { parseConsultationDocFormData } from "~/lib/consultation-form.server";
+import { defaultTitle } from "~/lib/consultation-schedules";
+import { presentationFor } from "~/lib/consultation-status";
 import { ConsultationDocFormSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
+  appWallClockNow,
   cancelOccurrence,
   deleteConsultation,
   documentConsultation,
@@ -160,13 +161,11 @@ export default function TrenerKonsultacjaDetail() {
           <Form method="post">
             <input type="hidden" name="intent" value="document" />
             <ConsultationForm
+              tryb="dokumentacja"
               defaultValue={{
                 scheduledAt: toLocalInput(c.scheduledAt),
                 durationMin: c.durationMin,
                 meetingUrl: c.meetingUrl,
-                // `periodFrom`/`periodTo` nie idą: kontrakt ich nie niesie
-                // (kolumny są spadkiem po legacy, `docs/04` o nich milczy).
-                title,
                 summary: c.summary ?? "",
                 items: items.map((it) => ({ body: it.body, status: it.status })),
               }}
@@ -196,14 +195,20 @@ export default function TrenerKonsultacjaDetail() {
 
   // ── VIEW mode ──────────────────────────────────────────────
   const openCount = items.filter((it) => it.status === "open").length;
-  const isCancelled = c.status === "cancelled";
+  // **Co wolno — z `allowedActions`, nigdy ze statusu** (D-FE-4). Serwer liczy
+  // tę listę ze stanu, roli ORAZ fazy terminu, więc znika z niej m.in.
+  // przekładanie spotkania, które już się zaczęło. Poprzednia wersja rysowała
+  // przyciski z samego `status` i pokazywała „Udokumentuj" przy terminie
+  // z prośbą o zmianę — kliknięcie kończyło się `409`.
+  const akcje = new Set<string>(c.allowedActions);
+  const mozePrzelozyc = akcje.has("reschedule");
+  const mozeOdwolac = akcje.has("cancel");
+  const mozeUdokumentowac = akcje.has("document");
+  const mozeUsunac = akcje.has("delete");
+  // Sam status zostaje wyłącznie do BRZMIENIA przycisku, nie do uprawnienia:
+  // „Edytuj dokumentację" zamiast „Udokumentuj" to kwestia słowa, nie prawa.
   const isDocumented = c.status === "documented";
-  const meta = consultationPresentation({
-    status: c.status,
-    scheduledAtISO: c.scheduledAt,
-    nowMs: Date.now(),
-    viewer: "trainer",
-  });
+  const meta = presentationFor(c.presentation);
 
   return (
     <div>
@@ -243,7 +248,7 @@ export default function TrenerKonsultacjaDetail() {
           )}
         </div>
         <div className="row" style={{ gap: 8 }}>
-          {!isCancelled && (
+          {mozeUdokumentowac && (
             <Link to="?document=1" className="btn btn-primary">
               <Icons.Note /> {isDocumented ? "Edytuj dokumentację" : "Udokumentuj"}
             </Link>
@@ -299,63 +304,68 @@ export default function TrenerKonsultacjaDetail() {
         </div>
       )}
 
-      {/* Akcje terminu: przełóż / odwołaj */}
-      {!isCancelled && !isDocumented && (
+      {/* Akcje terminu: przełóż / odwołaj — każda osobno, bo serwer odbiera je
+          osobno. Termin, który się zaczął, traci przekładanie, ale nie odwołanie. */}
+      {(mozePrzelozyc || mozeOdwolac) && (
         <div className="card" style={{ marginBottom: 18, maxWidth: 760 }}>
           <div className="field-label" style={{ marginBottom: 10 }}>
             Zarządzaj terminem
           </div>
-          <Form
-            method="post"
-            className="row"
-            style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}
-          >
-            <input type="hidden" name="intent" value="reschedule" />
-            <div className="field" style={{ flex: 1, minWidth: 220 }}>
-              <label htmlFor="rs-scheduledAt">Nowy termin</label>
-              <input
-                id="rs-scheduledAt"
-                className="input"
-                type="datetime-local"
-                name="scheduledAt"
-                defaultValue={toLocalInput(c.scheduledAt)}
-                required
-              />
-            </div>
-            <div className="field" style={{ width: 140 }}>
-              <label htmlFor="rs-durationMin">Czas (min)</label>
-              <input
-                id="rs-durationMin"
-                className="input"
-                type="number"
-                name="durationMin"
-                min={1}
-                max={600}
-                defaultValue={c.durationMin}
-              />
-            </div>
-            <button type="submit" className="btn">
-              <Icons.Calendar /> Przełóż
-            </button>
-          </Form>
-          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
-            <Form method="post">
-              <input type="hidden" name="intent" value="cancel" />
-              <ConfirmSubmitButton
-                className="btn btn-ghost btn-sm"
-                style={{ color: "var(--danger)" }}
-                confirmOptions={{
-                  title: "Odwołać termin?",
-                  message:
-                    "Termin zostanie oznaczony jako odwołany i zniknie z kalendarza podopiecznego.",
-                  destructive: true,
-                  confirmText: "Odwołaj termin",
-                }}
-              >
-                Odwołaj termin
-              </ConfirmSubmitButton>
+          {mozePrzelozyc && (
+            <Form
+              method="post"
+              className="row"
+              style={{ gap: 10, flexWrap: "wrap", alignItems: "flex-end" }}
+            >
+              <input type="hidden" name="intent" value="reschedule" />
+              <div className="field" style={{ flex: 1, minWidth: 220 }}>
+                <label htmlFor="rs-scheduledAt">Nowy termin</label>
+                <input
+                  id="rs-scheduledAt"
+                  className="input"
+                  type="datetime-local"
+                  name="scheduledAt"
+                  defaultValue={toLocalInput(c.scheduledAt)}
+                  required
+                />
+              </div>
+              <div className="field" style={{ width: 140 }}>
+                <label htmlFor="rs-durationMin">Czas (min)</label>
+                <input
+                  id="rs-durationMin"
+                  className="input"
+                  type="number"
+                  name="durationMin"
+                  min={5}
+                  max={480}
+                  defaultValue={c.durationMin}
+                />
+              </div>
+              <button type="submit" className="btn">
+                <Icons.Calendar /> Przełóż
+              </button>
             </Form>
-          </div>
+          )}
+          {mozeOdwolac && (
+            <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px solid var(--line)" }}>
+              <Form method="post">
+                <input type="hidden" name="intent" value="cancel" />
+                <ConfirmSubmitButton
+                  className="btn btn-ghost btn-sm"
+                  style={{ color: "var(--danger)" }}
+                  confirmOptions={{
+                    title: "Odwołać termin?",
+                    message:
+                      "Termin zostanie oznaczony jako odwołany i zniknie z kalendarza podopiecznego.",
+                    destructive: true,
+                    confirmText: "Odwołaj termin",
+                  }}
+                >
+                  Odwołaj termin
+                </ConfirmSubmitButton>
+              </Form>
+            </div>
+          )}
         </div>
       )}
 

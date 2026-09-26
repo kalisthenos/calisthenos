@@ -1,7 +1,7 @@
-import { Link, useLoaderData, type LoaderFunctionArgs } from "react-router";
+import { Link, type LoaderFunctionArgs, useLoaderData } from "react-router";
 import { Icons } from "~/components/icons";
 import { requireUser } from "~/lib/api/auth";
-import { daysAgo, pluralizePl, type PlForms } from "~/lib/format";
+import { type PlForms, daysAgo, pluralizePl } from "~/lib/format";
 import { loadTrainerDashboard } from "~/lib/views";
 
 const OSOBA_AKTYWNA: PlForms = {

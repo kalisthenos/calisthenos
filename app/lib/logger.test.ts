@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { errorMeta, formatLogLine, logger, logUnhandled } from "~/lib/logger";
+import { errorMeta, formatLogLine, logUnhandled, logger } from "~/lib/logger";
 
 /** Pierwszy argument pierwszego wywołania zmockowanego `console.*` jako string. */
 function firstCallLine(fn: typeof console.error): string {

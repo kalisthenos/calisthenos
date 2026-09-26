@@ -28,11 +28,14 @@ niesformatowanego ani nagłówka spoza konwencji. Tutaj **nie biegnie nic**. Dop
 Właściciel, bramką był człowiek patrzący na diff; agenta ta bramka nie obejmuje.
 
 Skutek praktyczny: **`npm run lint` NIE wystarcza przed commitem.** To `biome lint`, czyli sam
-linter — formatowania nie dotyka. Pełne sprawdzenie to `npx biome check`, ale **na zmienionych
-plikach, nie na `.`**: na tej maszynie `core.autocrlf=true` wypakowuje całe drzewo z CRLF,
-a Biome chce LF, więc `check .` zwraca dziś **260 błędów** o samych zakończeniach linii
-i Twój diff w nich ginie. To jest defekt środowiska, nie kodu — opisany jako D-FE-1
-w `docs/defekty.md`.
+linter — formatowania nie dotyka. Pełnym sprawdzeniem jest `npx biome check`.
+
+**Od 2026-09-21 `npx biome check .` przechodzi na czysto** i wolno mu ufać. Wcześniej zwracał
+**267 błędów** o samych zakończeniach linii — `core.autocrlf=true` wypakowywał drzewo z CRLF,
+a Biome chce LF — więc jedynym użytecznym wariantem było sprawdzanie po zmienionych plikach.
+Zamknęło to `.gitattributes` z `* text=auto eol=lf`: zakończenia linii deklaruje teraz
+repozytorium, nie klient (D-FE-1 w `docs/defekty.md`, zamknięty). Sprawdzanie po plikach zostaje
+jako zwykła oszczędność czasu, nie jako obejście.
 
 Konwencja commita jest ta sama, co w BE: **konwencjonalny, po polsku**, nagłówek do 100 znaków,
 treść opisująca decyzję. Gałąź robocza, nie `master` wprost — to drzewo idzie przez PR-y.

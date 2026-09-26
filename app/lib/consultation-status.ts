@@ -1,12 +1,25 @@
 import type { ConsultationView } from "@kalisthenos/api-client";
 
-// Status z kontraktu, nie ze schematu Drizzle — źródłem zbioru wartości jest BE.
-type ConsultationStatus = ConsultationView["status"];
-
 /**
- * Jedno źródło prawdy dla prezentacji statusu terminu konsultacji — etykieta +
- * ton — używane przez OBA panele (trener i podopieczny), żeby ten sam termin
- * nigdy nie wyglądał inaczej zależnie od widoku. Czysta logika (cel testów).
+ * Plakietka terminu konsultacji — etykieta i ton — **wyliczana z klucza, który
+ * przysyła serwer**, nie z własnej tabeli przejść.
+ *
+ * Do 2026-09-21 ten moduł liczył klucz sam, z `status` i `scheduledAt`, mimo że
+ * kontrakt niesie gotowe `presentation.key` przy każdym terminie. Dwie kopie
+ * jednej reguły rozjechały się dokładnie tak, jak zapowiadał docblock
+ * `CONSULTATION_ACTION` po stronie BE — D-FE-4.
+ *
+ * **Etykieta nie zależy już od roli.** `docs/02` §5 podnosi to do rangi
+ * niezmiennika: ten sam termin nie może wyglądać inaczej u trenera
+ * i u podopiecznego. Dawne „do potwierdzenia" u podopiecznego łamało go wprost;
+ * to, co podopieczny ma zrobić, mówią teraz `allowedActions`, czyli przyciski,
+ * a nie plakietka.
+ *
+ * **Ton zostaje słownikiem TEGO drzewa**, nie kontraktu. Kontraktowe
+ * `neutral | positive | warning | muted` nie odróżnia „potwierdzony" od
+ * „udokumentowany", a design-system je rozróżnia — i te same tony noszą
+ * zgłoszenia (`feature-request-badge.tsx`). Przeliczanie tonu z kontraktu
+ * zubożyłoby wygląd i zabrałoby zgłoszeniom ich własny słownik.
  */
 
 export type ConsultationTone =
@@ -17,7 +30,7 @@ export type ConsultationTone =
   | "cancelled"
   | "done";
 
-export interface ConsultationPresentation {
+export interface ConsultationBadge {
   label: string;
   tone: ConsultationTone;
 }
@@ -61,35 +74,43 @@ export function mostUrgentTone(tones: ConsultationTone[]): ConsultationTone | nu
   return best;
 }
 
-export interface PresentationArgs {
-  status: ConsultationStatus;
-  /** ISO (UTC) terminu — potrzebne by odróżnić `planned` przyszły od minionego. */
-  scheduledAtISO: string;
-  nowMs: number;
-  viewer: "trainer" | "trainee";
-}
+/**
+ * Klucze znane dziś. **Celowo `Record<string, …>`, nie
+ * `Record<ConsultationPresentationKey, …>`** — patrz `presentationFor` niżej.
+ *
+ * `in_progress` i `confirmed_past` są tu **wcześniej, niż pojawią się w typach
+ * pakietu**: backend zaczyna je zwracać po wydaniu rozszerzającym (ADR-0042),
+ * a klient ma je rozumieć od pierwszej odpowiedzi, nie od kolejnego podbicia.
+ * `planned_past` i `confirmed_past` dzielą etykietę, bo z punktu widzenia
+ * trenera znaczą to samo: spotkanie się odbyło i czeka na dokumentację.
+ */
+const BADGE: Record<string, ConsultationBadge> = {
+  planned: { label: "zaplanowany", tone: "scheduled" },
+  planned_past: { label: "do udokumentowania", tone: "pending" },
+  confirmed: { label: "potwierdzony", tone: "confirmed" },
+  in_progress: { label: "trwa teraz", tone: "confirmed" },
+  confirmed_past: { label: "do udokumentowania", tone: "pending" },
+  change_requested: { label: "prośba o zmianę", tone: "change" },
+  cancelled: { label: "odwołany", tone: "cancelled" },
+  documented: { label: "udokumentowany", tone: "done" },
+};
 
 /**
- * Etykiety w rodzaju męskim (zgodnie z „termin"). `planned` po terminie:
- * dla trenera → „do udokumentowania", dla podopiecznego → „do potwierdzenia".
+ * Wartość zapasowa dla klucza, którego ten klient jeszcze nie zna.
+ *
+ * **Nie jest ostrożnością — jest zobowiązaniem z ADR-0042.** `presentation.key`
+ * jest w kontrakcie zadeklarowany jako `x-extensible-enum`, czyli zbiór, który
+ * ma rosnąć; w zamian każdy konsument obowiązany jest obsłużyć wartość nieznaną.
+ * Wyczerpujący `Record` po unii z pakietu spełniałby ten obowiązek pozornie:
+ * kompilowałby się, a w czasie wykonania oddawał `undefined` i wywracał render
+ * na pierwszej nowej wartości.
  */
-export function consultationPresentation(args: PresentationArgs): ConsultationPresentation {
-  const { status, scheduledAtISO, nowMs, viewer } = args;
-  switch (status) {
-    case "confirmed":
-      return { label: "potwierdzony", tone: "confirmed" };
-    case "change_requested":
-      return { label: "prośba o zmianę", tone: "change" };
-    case "cancelled":
-      return { label: "odwołany", tone: "cancelled" };
-    case "documented":
-      return { label: "udokumentowany", tone: "done" };
-    default: {
-      // planned
-      if (viewer === "trainee") return { label: "do potwierdzenia", tone: "pending" };
-      const isPast = new Date(scheduledAtISO).getTime() < nowMs;
-      if (isPast) return { label: "do udokumentowania", tone: "pending" };
-      return { label: "zaplanowany", tone: "scheduled" };
-    }
-  }
+const NIEZNANY: ConsultationBadge = { label: "termin", tone: "scheduled" };
+
+/**
+ * Plakietka dla terminu. Bierze **całe** `presentation` z kontraktu, nie sam
+ * klucz — dzięki temu wołający nie ma jak podać klucza z innego miejsca.
+ */
+export function presentationFor(presentation: ConsultationView["presentation"]): ConsultationBadge {
+  return BADGE[presentation.key] ?? NIEZNANY;
 }

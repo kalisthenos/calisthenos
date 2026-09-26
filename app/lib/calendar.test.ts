@@ -6,7 +6,14 @@
 // wspólnego z badanym kodem. Ten sam powód, co w `app/routes/wyloguj.test.ts`.
 import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
-import { disconnectCalendar, getCalendarConnection, startCalendarAuthorization } from "./calendar";
+import {
+  calendarConnectionCopy,
+  disconnectCalendar,
+  getCalendarConnection,
+  startCalendarAuthorization,
+  syncFailureKindCopy,
+  syncFailuresNotice,
+} from "./calendar";
 
 function klient(reguly: (req: Request) => Response) {
   return createApiClient({
@@ -95,5 +102,95 @@ describe("calendar — kalendarz zewnętrzny na kontrakcie", () => {
 
     expect(metoda).toBe("DELETE");
     expect(sciezka).toBe("/v1/calendar/connection");
+  });
+});
+
+/**
+ * D-FE-2. Kontrakt niesie TRZY stany, a ekran integracji pokazywał dwa —
+ * `broken` wyglądał identycznie jak `connected`, więc trener z cofniętą zgodą
+ * czytał „Połączone konto" i nic więcej. Reguła mieszka tutaj, a nie w trasie,
+ * bo tylko tak da się jej dowieść bez renderowania komponentu.
+ */
+describe("calendarConnectionCopy — trzy stany kontraktu, trzy różne ekrany", () => {
+  it("połączone: bez ostrzeżenia, z samym rozłączeniem", () => {
+    const copy = calendarConnectionCopy("connected");
+
+    expect(copy.ostrzezenie).toBeNull();
+    expect(copy.polaczOdNowa).toBe(false);
+    expect(copy.mozliwoscRozlaczenia).toBe(true);
+  });
+
+  it("rozłączone: zaproszenie do połączenia, bez rozłączania", () => {
+    const copy = calendarConnectionCopy("disconnected");
+
+    expect(copy.ostrzezenie).toBeNull();
+    expect(copy.polaczOdNowa).toBe(false);
+    expect(copy.mozliwoscRozlaczenia).toBe(false);
+  });
+
+  it("zepsute: ostrzeżenie ORAZ obie drogi wyjścia naraz", () => {
+    const copy = calendarConnectionCopy("broken");
+
+    // Bez tego zdania trener nie dowie się, że integracja stanęła — dowiadywał
+    // się dotąd przypadkiem, z komunikatu przy „Synchronizuj z Google".
+    expect(copy.ostrzezenie).not.toBeNull();
+    // OBIE drogi, bo ekran nie wie, która zadziała: po `auth-permanent`
+    // wystarcza ponowna zgoda (`save()` zeruje `broken_at`), po `gone` trzeba
+    // najpierw rozłączyć, bo w wierszu zostaje `calendar_id` wskazujący
+    // nieistniejący kalendarz. Kontrakt tych dwóch nie rozróżnia.
+    expect(copy.polaczOdNowa).toBe(true);
+    expect(copy.mozliwoscRozlaczenia).toBe(true);
+  });
+
+  it("`broken` NIE jest liczone jako brak połączenia", () => {
+    // Regresja wprost: `status !== "disconnected"` było jedyną regułą tego
+    // ekranu i zlewało `broken` z `connected`. Konto zostaje pokazane — to
+    // wciąż jest połączenie, tylko wymaga odnowienia.
+    expect(calendarConnectionCopy("broken").pokazKonto).toBe(true);
+    expect(calendarConnectionCopy("connected").pokazKonto).toBe(true);
+    expect(calendarConnectionCopy("disconnected").pokazKonto).toBe(false);
+  });
+});
+
+describe("zaległości synchronizacji — D-26", () => {
+  it("nazywa trzy dzisiejsze rodzaje operacji", () => {
+    expect(syncFailureKindCopy("schedule")).toContain("wpisać");
+    expect(syncFailureKindCopy("reschedule")).toContain("przenieść");
+    expect(syncFailureKindCopy("cancel")).toContain("usunąć");
+  });
+
+  it("wartość NIEZNANA dostaje zdanie ogólne, nie pustkę i nie zgadywanie", () => {
+    // `kind` jest `x-extensible-enum` (ADR-0042): zbiór ma rosnąć, a konsument
+    // jest ZOBOWIĄZANY obsłużyć wartość nieznaną. To jest cały ten przypadek —
+    // mapa wyczerpująca skompilowałaby się dziś i pękła u użytkownika przy
+    // pierwszej nowej wartości, bo nowego enuma nie widać w typach, dopóki
+    // ktoś nie podbije klienta.
+    const zdanie = syncFailureKindCopy("odwolanie-serii");
+
+    expect(zdanie).not.toBe("");
+    // Gałąź domyślna NIE MOŻE twierdzić, o którą operację chodzi — zdanie
+    // konkretne byłoby prawdziwe dla trzech dzisiejszych wartości i fałszywe
+    // dla czwartej.
+    expect(zdanie).not.toMatch(/wpisać|przenieść|usunąć/);
+  });
+
+  it("bez połączenia ostrzega, że ponowienie NIE naprawi kalendarza", () => {
+    // Jedyny przypadek, w którym przycisk kłamie: `CalendarSyncService`
+    // wychodzi na `credentials === null` i nie robi nic, a zdarzenie zostaje
+    // uznane za obsłużone — pozycja znika z listy, choć w Google nic się nie
+    // wydarzyło. Trener ląduje tu częściej, niż wygląda: po błędzie `gone`
+    // rozłączenie jest jedyną drogą wyjścia (D-24).
+    const uwaga = syncFailuresNotice("disconnected", 2);
+
+    expect(uwaga).not.toBeNull();
+    expect(uwaga).toMatch(/nie zmieni niczego w Google/i);
+  });
+
+  it("milczy, gdy nie ma o czym ostrzegać", () => {
+    // Dwie strony granicy. Ostrzeżenie przy zdrowym połączeniu byłoby szumem,
+    // a przy pustej liście — ostrzeżeniem o niczym.
+    expect(syncFailuresNotice("connected", 2)).toBeNull();
+    expect(syncFailuresNotice("broken", 2)).toBeNull();
+    expect(syncFailuresNotice("disconnected", 0)).toBeNull();
   });
 });

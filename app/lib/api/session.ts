@@ -135,15 +135,10 @@ function encode(session: ApiSession): string {
 
 function decode(raw: string): ApiSession | null {
   try {
-    const parsed: unknown = JSON.parse(
-      atob(raw.replaceAll("-", "+").replaceAll("_", "/")),
-    );
+    const parsed: unknown = JSON.parse(atob(raw.replaceAll("-", "+").replaceAll("_", "/")));
 
     if (!parsed || typeof parsed !== "object") return null;
-    const { accessToken, refreshToken, accessExpiresAt } = parsed as Record<
-      string,
-      unknown
-    >;
+    const { accessToken, refreshToken, accessExpiresAt } = parsed as Record<string, unknown>;
 
     if (typeof accessToken !== "string" || accessToken === "") return null;
     if (typeof refreshToken !== "string" || refreshToken === "") return null;

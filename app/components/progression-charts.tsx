@@ -1,4 +1,3 @@
-import { useCallback, useMemo } from "react";
 import { AxisBottom, AxisLeft } from "@visx/axis";
 import { localPoint } from "@visx/event";
 import { GridRows } from "@visx/grid";
@@ -7,6 +6,7 @@ import { ParentSize } from "@visx/responsive";
 import { scaleBand, scaleLinear, scalePoint, scaleTime } from "@visx/scale";
 import { Bar, LinePath } from "@visx/shape";
 import { useTooltip, useTooltipInPortal } from "@visx/tooltip";
+import { useCallback, useMemo } from "react";
 import type { ComparisonSeriesView } from "~/lib/progression";
 import type { ChartPoint, ProgressionStatus, StatusSummary } from "~/lib/progression-math";
 

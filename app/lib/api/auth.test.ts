@@ -1,7 +1,7 @@
-import { describe, expect, it } from "vitest";
 import { RouterContextProvider } from "react-router";
-import { type AuthUser, apiContext } from "./context";
+import { describe, expect, it } from "vitest";
 import { hasRole, optionalUser, requireUser } from "./auth";
+import { type AuthUser, apiContext } from "./context";
 
 const API = { znacznik: "klient z middleware'u" } as never;
 

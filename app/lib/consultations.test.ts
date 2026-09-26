@@ -1,19 +1,20 @@
 import { describe, expect, it } from "vitest";
 import { createApiClient } from "./api/client";
 import { ApiError } from "./api/errors";
-import type { ConsultationDocForm } from "./consultation-types";
+import type { AdhocConsultationForm, ConsultationDocForm } from "./consultation-types";
 import {
-  cancelOccurrence,
-  canTraineeRespond,
-  ConsultationError,
   type ConsultationDetail,
+  ConsultationError,
   type ConsultationView,
+  LIST_WINDOW_DAYS,
+  appWallClockNow,
+  canTraineeRespond,
+  cancelOccurrence,
   createAdhocConsultation,
   deleteConsultation,
   documentConsultation,
   fromAppWallClock,
   getConsultationDetail,
-  LIST_WINDOW_DAYS,
   listOccurrencesForTrainer,
   listOccurrencesInRange,
   loadUpcomingConsultations,
@@ -99,6 +100,41 @@ describe("czas — moment BE ↔ czas ścienny FE", () => {
     expect(toAppWallClock(fromAppWallClock("2026-03-15T09:15:00.000Z"))).toBe(
       "2026-03-15T09:15:00.000Z",
     );
+  });
+
+  /**
+   * D-FE-3. `scheduledAt` opuszcza ten moduł jako CZAS ŚCIENNY zapisany
+   * w komponentach UTC, a `Date.now()` jest PRAWDZIWYM momentem. Porównanie
+   * jednego z drugim myli się dokładnie o offset strefy — dwie godziny latem,
+   * godzinę zimą — więc spotkanie sprzed półtorej godziny wypada latem jako
+   * przyszłe.
+   *
+   * **Dlaczego nie złapał tego żaden z testów wyżej:** wszystkie operują na
+   * datach oddalonych o dni, a pomyłka jest rzędu godzin. Test na danych,
+   * w których obie strony i tak się zgadzają, nie odróżnia poprawnej
+   * implementacji od zepsutej.
+   */
+  const TERAZ_LATEM = new Date("2026-09-21T12:00:00.000Z");
+
+  it("„teraz” da się wyrazić w konwencji tego modułu, nie tylko jako moment", () => {
+    expect(appWallClockNow(TERAZ_LATEM)).toBe(
+      Date.parse(toAppWallClock(TERAZ_LATEM.toISOString())),
+    );
+    expect(appWallClockNow(TERAZ_LATEM) - TERAZ_LATEM.getTime()).toBe(2 * 60 * 60 * 1000);
+  });
+
+  it("zimą przesunięcie jest godzinne — wartość zależy od momentu, nie jest stałą", () => {
+    const teraz = new Date("2026-01-21T12:00:00.000Z");
+    expect(appWallClockNow(teraz) - teraz.getTime()).toBe(60 * 60 * 1000);
+  });
+
+  it("termin sprzed 90 minut jest MINIONY, a wobec surowego momentu wyglądałby na przyszły", () => {
+    const zaczalSie = Date.parse(toAppWallClock("2026-09-21T10:30:00.000Z"));
+
+    expect(zaczalSie).toBeLessThan(appWallClockNow(TERAZ_LATEM));
+    // Kontrast, nie ozdoba: bez tej asercji test przechodziłby także przed
+    // poprawką, bo nie odróżniałby jednej konwencji czasu od drugiej.
+    expect(zaczalSie).toBeGreaterThan(TERAZ_LATEM.getTime());
   });
 });
 
@@ -259,18 +295,26 @@ describe("getConsultationDetail — szczegół terminu", () => {
   });
 });
 
+/**
+ * Dokumentacja niesie DOKŁADNIE to, co przyjmuje `POST …/document` — od
+ * 2026-09-21 (D-FE-5) nie ma tu już terminu, czasu trwania, odnośnika, tytułu
+ * ani okresu. Pięć pól, które formularz zbierał, Zod walidował, a moduł
+ * wyrzucał przed wysyłką.
+ */
 const FORMULARZ: ConsultationDocForm = {
-  scheduledAt: "2026-07-10T18:00",
-  durationMin: 45,
-  meetingUrl: null,
-  title: "Konsultacja miesięczna",
   summary: "Notatki",
-  periodFrom: "2026-06-01",
-  periodTo: "2026-06-30",
   items: [
     { body: "A", status: "open" },
     { body: "B", status: "resolved" },
   ],
+};
+
+/** Termin poza serią przyjmuje więcej — stąd osobny kształt. */
+const FORMULARZ_NOWY: AdhocConsultationForm = {
+  ...FORMULARZ,
+  scheduledAt: "2026-07-10T18:00",
+  durationMin: 45,
+  meetingUrl: null,
 };
 
 describe("createAdhocConsultation — termin poza serią", () => {
@@ -289,7 +333,7 @@ describe("createAdhocConsultation — termin poza serią", () => {
 
     const id = await createAdhocConsultation(api, {
       traineeId: "t-1",
-      form: FORMULARZ,
+      form: FORMULARZ_NOWY,
       documented: false,
     });
 
@@ -312,7 +356,11 @@ describe("createAdhocConsultation — termin poza serią", () => {
       return json(201, SZCZEGOL);
     });
 
-    await createAdhocConsultation(api, { traineeId: "t-1", form: FORMULARZ, documented: true });
+    await createAdhocConsultation(api, {
+      traineeId: "t-1",
+      form: FORMULARZ_NOWY,
+      documented: true,
+    });
 
     expect(cialo).toEqual({
       traineeId: "t-1",
@@ -328,7 +376,7 @@ describe("createAdhocConsultation — termin poza serią", () => {
   it("`404` (cudzy podopieczny) idzie do formularza jako ConsultationError, `500` leci jako ApiError", async () => {
     const cudzy = klient(() => odmowa(404, "RESOURCE_NOT_FOUND", "Nie znaleziono podopiecznego."));
     const awaria = klient(() => odmowa(500, "INTERNAL", "Coś poszło nie tak."));
-    const wejscie = { traineeId: "t-x", form: FORMULARZ, documented: false };
+    const wejscie = { traineeId: "t-x", form: FORMULARZ_NOWY, documented: false };
 
     const odmowaPary = await createAdhocConsultation(cudzy, wejscie).catch((e) => e);
     const bladAwarii = await createAdhocConsultation(awaria, wejscie).catch((e) => e);

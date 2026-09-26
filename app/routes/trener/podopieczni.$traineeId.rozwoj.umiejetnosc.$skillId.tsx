@@ -1,10 +1,10 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   useActionData,
   useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { ExerciseProgressionPanel } from "~/components/exercise-progression-panel";
 import { VariationLadder } from "~/components/skill-tree";
@@ -20,8 +20,8 @@ import {
   recordAdvancement,
   setStartingLevel,
 } from "~/lib/skill-progression";
-import { SkillError } from "~/lib/skills";
 import { AdvancementFormSchema } from "~/lib/skill-types";
+import { SkillError } from "~/lib/skills";
 import { findTraineeRef } from "~/lib/trainees";
 
 const RANGES: ProgressionRange[] = ["4w", "3m", "6m", "all"];

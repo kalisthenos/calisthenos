@@ -1,8 +1,8 @@
 import {
   type ActionFunctionArgs,
   Form,
-  type LoaderFunctionArgs,
   Link,
+  type LoaderFunctionArgs,
   useActionData,
   useLoaderData,
 } from "react-router";
@@ -13,8 +13,8 @@ import { Icons } from "~/components/icons";
 import { ScheduleForm } from "~/components/schedule-form";
 import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
-import { parseScheduleFormData } from "~/lib/consultation-form.server";
 import { getCalendarConnection } from "~/lib/calendar";
+import { parseScheduleFormData } from "~/lib/consultation-form.server";
 import {
   type ConsultationCadence,
   ScheduleError,
@@ -23,10 +23,11 @@ import {
   getActiveSchedule,
   upsertSchedule,
 } from "~/lib/consultation-schedules";
-import { consultationPresentation } from "~/lib/consultation-status";
+import { presentationFor } from "~/lib/consultation-status";
 import { ScheduleFormSchema } from "~/lib/consultation-types";
 import {
   ConsultationError,
+  appWallClockNow,
   listOccurrencesForTrainer,
   runConsultationSync,
 } from "~/lib/consultations";
@@ -115,7 +116,8 @@ export async function action(args: ActionFunctionArgs) {
 export default function TrenerKonsultacjeIndex() {
   const { trainee, schedule, occurrences, googleActive } = useLoaderData<typeof loader>();
   const actionData = useActionData<typeof action>();
-  const now = Date.now();
+  // Czas ścienny, nie moment — `scheduledAt` jest w tej samej konwencji (D-FE-3).
+  const now = appWallClockNow();
 
   const upcoming = occurrences.filter(
     (o) =>
@@ -137,12 +139,7 @@ export default function TrenerKonsultacjeIndex() {
     return (
       <div className="list">
         {items.map((o) => {
-          const meta = consultationPresentation({
-            status: o.status,
-            scheduledAtISO: o.scheduledAt,
-            nowMs: now,
-            viewer: "trainer",
-          });
+          const meta = presentationFor(o.presentation);
           return (
             <ConsultationRow
               key={o.id}

@@ -1,0 +1,14 @@
+# Zakończenia linii deklaruje REPOZYTORIUM, nie maszyna — D-FE-1 w `docs/defekty.md`.
+#
+# Bez tego pliku rozstrzygał `core.autocrlf` klienta. Na Windows stoi on domyślnie
+# na `true`, więc wypakowanie dawało drzewo z CRLF, a Biome chce LF i **odmawiał
+# na każdym pliku tego drzewa**: 267 błędów o samych zakończeniach linii, w tym
+# odmowa hooka `verify-project` przy KAŻDEJ edycji. Indeks był przy tym zdrowy —
+# `autocrlf` normalizuje przy zapisie — więc `git diff` o tym milczał i rozjazd
+# żył wyłącznie w katalogu roboczym, między tym, co widzi git, a tym, co widzi
+# Biome.
+#
+# `text=auto` zostawia pliki binarne w spokoju (git wykrywa je sam), a `eol=lf`
+# wymusza LF w katalogu roboczym niezależnie od ustawień klienta — więc reguła
+# obowiązuje każdy klon, nie tylko ten jeden.
+* text=auto eol=lf

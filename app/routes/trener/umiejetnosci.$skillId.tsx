@@ -1,11 +1,11 @@
 import {
+  type ActionFunctionArgs,
   Form,
   Link,
+  type LoaderFunctionArgs,
   redirect,
   useActionData,
   useLoaderData,
-  type ActionFunctionArgs,
-  type LoaderFunctionArgs,
 } from "react-router";
 import { ConfirmSubmitButton } from "~/components/confirm-provider";
 import { Icons } from "~/components/icons";
@@ -14,6 +14,7 @@ import { requireUser } from "~/lib/api/auth";
 import { ApiError, toRouteResponse } from "~/lib/api/errors";
 import { pluralizePl } from "~/lib/format";
 import { SKILL_TIERS, TIER_LABEL } from "~/lib/skill-tier";
+import { PrerequisiteFormSchema, ReorderFormSchema, SkillFormSchema } from "~/lib/skill-types";
 import {
   SkillError,
   addPrerequisite,
@@ -25,7 +26,6 @@ import {
   reorderVariations,
   updateSkill,
 } from "~/lib/skills";
-import { PrerequisiteFormSchema, ReorderFormSchema, SkillFormSchema } from "~/lib/skill-types";
 
 export async function loader(args: LoaderFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainer" });

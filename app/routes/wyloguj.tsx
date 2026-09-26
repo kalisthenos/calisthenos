@@ -1,4 +1,4 @@
-import { redirect, type ActionFunctionArgs, type LoaderFunctionArgs } from "react-router";
+import { type ActionFunctionArgs, type LoaderFunctionArgs, redirect } from "react-router";
 import { optionalUser } from "~/lib/api/auth";
 import { endSession } from "~/lib/api/auth-session";
 import { clearSessionCookie, readSessionCookie } from "~/lib/api/session";
