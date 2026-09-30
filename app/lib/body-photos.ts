@@ -33,10 +33,11 @@ export class BodyPhotoError extends Error {
  * Wąsko, po statusie: `400` (data spoza zakresu, zły kształt ładunku), `404`
  * (plik nieistniejący albo cudzy — §2 `docs/04` rozciąga „cudzy = nieistniejący"
  * na identyfikatory w ciele) i `409` (niezmiennik domenowy). Rozgałęzienia po
- * `error.code` tu nie ma, bo kontrakt nie deklaruje dla sylwetki ANI JEDNEGO
+ * `error.code` tu nie ma, bo dla ZAPISU kontrakt nie deklaruje ANI JEDNEGO
  * kodu znaczącego dla logiki — same rodziny statusów; dopisanie słownika kodów
- * „na zapas" udawałoby wiedzę, której nie mamy. Reszta leci `ApiError`-em:
- * awaria BE ma zostać awarią, nie komunikatem o zdjęciu.
+ * „na zapas" udawałoby wiedzę, której nie mamy. Jedyny taki kod w tym module
+ * dotyczy odczytu galerii trenera (`BODY_PHOTOS_NOT_SHARED`, niżej). Reszta leci
+ * `ApiError`-em: awaria BE ma zostać awarią, nie komunikatem o zdjęciu.
  */
 function toBodyPhotoError(e: unknown): never {
   if (e instanceof ApiError && (e.status === 400 || e.status === 404 || e.status === 409)) {
@@ -144,15 +145,46 @@ export async function listAllMyBodyPhotos(api: Api): Promise<BodyPhotoDto[]> {
 }
 
 /**
+ * Galeria podopiecznego u trenera, z flagą udostępnienia nazwaną tak samo jak
+ * `bodyPhotoCoverage.shared` w przeglądzie klienta (ADR-0047 BE). `shared: false`
+ * nie niesie ANI JEDNEGO zdjęcia — także wtedy, gdy część stron zdążyła przyjść.
+ */
+export type TraineeBodyPhotos = { shared: true; photos: BodyPhotoDto[] } | { shared: false };
+
+/**
+ * Odmowa galerii, gdy zgoda podopiecznego na dane o zdrowiu nie jest w mocy.
+ * Kontrakt nie odróżnia braku zgody, zgody nieaktualnej i wycofanej — jeden kod
+ * na wszystkie trzy, więc i ekran ich nie rozróżnia.
+ */
+const BODY_PHOTOS_NOT_SHARED = "BODY_PHOTOS_NOT_SHARED";
+
+/**
  * Wszystkie zdjęcia podopiecznego, od najnowszego. Trener ogląda galerię bez
  * stronicowania (tak było przed integracją), więc ta lista karmi u niego i siatkę,
  * i porównanie — jednym kompletem żądań, nie dwoma.
+ *
+ * `403 BODY_PHOTOS_NOT_SHARED` to stan ekranu, nie awaria — wraca jako
+ * `{ shared: false }`. Wąsko, po KODZIE: ten sam status niesie naruszenie reguły
+ * roli (`ACCESS_DENIED`), a cudzy podopieczny to nadal `404` — oba lecą
+ * `ApiError`-em. Odmowa na dalszej stronie unieważnia strony już pobrane: zgodę
+ * wolno wycofać w trakcie sklejania, a pokazanie ich po wycofaniu byłoby wglądem,
+ * którego zgoda już nie daje.
  */
 export async function listAllTraineeBodyPhotos(
   api: Api,
   traineeId: string,
-): Promise<BodyPhotoDto[]> {
-  return await gluePages((n) => traineeBodyPhotoPage(api, traineeId, n));
+): Promise<TraineeBodyPhotos> {
+  try {
+    return {
+      shared: true,
+      photos: await gluePages((n) => traineeBodyPhotoPage(api, traineeId, n)),
+    };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 403 && e.code === BODY_PHOTOS_NOT_SHARED) {
+      return { shared: false };
+    }
+    throw e;
+  }
 }
 
 // ============================================================

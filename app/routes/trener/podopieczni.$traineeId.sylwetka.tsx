@@ -9,7 +9,7 @@ import {
   getSideBySidePhotoPairs,
   listAllTraineeBodyPhotos,
 } from "~/lib/body-photos";
-import { findTraineeRef } from "~/lib/trainees";
+import { type TraineeRef, findTraineeRef } from "~/lib/trainees";
 
 export async function loader(args: LoaderFunctionArgs) {
   const { api } = requireUser(args.context, { role: "trainer" });
@@ -25,16 +25,22 @@ export async function loader(args: LoaderFunctionArgs) {
   // stronicowania, a porównanie „przed / po" i tak potrzebuje kompletu zdjęć.
   // Pola `pairs` z odpowiedzi świadomie nie czytamy — patrz komentarz przy
   // `traineeBodyPhotoPage` w module.
-  const photos = await listAllTraineeBodyPhotos(api, traineeId);
+  //
+  // Kolejność ma znaczenie: cudzy podopieczny kończy się wyżej `404`, więc odmowa
+  // z powodu zgody (ADR-0047 BE) pada tu wyłącznie przy WŁASNYM — tak samo jak po
+  // stronie BE, która sprawdza relację przed zgodą.
+  const gallery = await listAllTraineeBodyPhotos(api, traineeId);
+  if (!gallery.shared) return { trainee, shared: false as const };
 
   // Adnotacja typem komponentu jest bramką: pilnuje, że kształt pary z modułu
   // nadal pasuje do `SideBySideSection`.
-  const resolvedPairs: ResolvedPair[] = getSideBySidePhotoPairs(photos);
+  const resolvedPairs: ResolvedPair[] = getSideBySidePhotoPairs(gallery.photos);
 
   return {
     trainee,
+    shared: true as const,
     // Adresy są już gotowe — origin dołożył moduł; trasa tylko przemianowuje pole.
-    photos: photos.map((p) => ({
+    photos: gallery.photos.map((p) => ({
       id: p.id,
       view: p.view,
       takenOn: p.takenOn,
@@ -47,8 +53,46 @@ export async function loader(args: LoaderFunctionArgs) {
 
 type ViewFilter = "all" | BodyPhotoView;
 
+/** Zdjęcie w kształcie ekranu — adres gotowy, origin dołożył moduł. */
+type GalleryPhoto = PhotoGroup["photos"][number];
+
 export default function TrenerSylwetkaPodopiecznego() {
-  const { trainee, photos, resolvedPairs } = useLoaderData<typeof loader>();
+  const data = useLoaderData<typeof loader>();
+  // `shared` czytane PIERWSZE: bez zgody zdjęć w odpowiedzi nie ma wcale, a pusta
+  // galeria mówiłaby „podopieczny jeszcze nie wgrał zdjęć" — nieprawdę.
+  if (!data.shared) return <NotShared trainee={data.trainee} />;
+  return <Gallery trainee={data.trainee} photos={data.photos} resolvedPairs={data.resolvedPairs} />;
+}
+
+/**
+ * `403 BODY_PHOTOS_NOT_SHARED` (ADR-0047 BE) — stan ekranu, nie błąd. Zdanie
+ * świadomie NIE nazywa przyczyny: kontrakt nie odróżnia braku zgody, zgody
+ * nieaktualnej i wycofanej, a „wycofał zgodę" przy podopiecznym, który nigdy jej
+ * nie udzielił, byłoby zgadywaniem w cudzej sprawie.
+ */
+function NotShared({ trainee }: { trainee: TraineeRef }) {
+  return (
+    <div>
+      <Heading trainee={trainee} sub="Zdjęcia niedostępne." />
+      <div className="empty">
+        <h3>Podopieczny nie udostępnia Ci zdjęć sylwetki</h3>
+        <div>
+          Zdjęcia sylwetki są danymi o zdrowiu — zobaczysz je, gdy podopieczny udzieli na to zgody.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function Gallery({
+  trainee,
+  photos,
+  resolvedPairs,
+}: {
+  trainee: TraineeRef;
+  photos: GalleryPhoto[];
+  resolvedPairs: ResolvedPair[];
+}) {
   const [filter, setFilter] = useState<ViewFilter>("all");
   const [lightboxId, setLightboxId] = useState<string | null>(null);
 
@@ -84,26 +128,14 @@ export default function TrenerSylwetkaPodopiecznego() {
 
   return (
     <div>
-      <div className="crumbs">
-        <Link to="/trener/podopieczni">Podopieczni</Link>
-        <span className="sep">›</span>
-        <Link to={`/trener/podopieczni/${trainee.id}`}>{trainee.displayName}</Link>
-        <span className="sep">›</span>
-        <span className="current">Sylwetka</span>
-      </div>
-      <div className="pagehead">
-        <div>
-          <div className="eyebrow" style={{ marginBottom: 6 }}>
-            {trainee.displayName}
-          </div>
-          <h1>Sylwetka</h1>
-          <div className="sub">
-            {photos.length === 0
-              ? "Brak zdjęć."
-              : `${photos.length} ${photos.length === 1 ? "zdjęcie" : "zdjęć"} · najnowsze u góry`}
-          </div>
-        </div>
-      </div>
+      <Heading
+        trainee={trainee}
+        sub={
+          photos.length === 0
+            ? "Brak zdjęć."
+            : `${photos.length} ${photos.length === 1 ? "zdjęcie" : "zdjęć"} · najnowsze u góry`
+        }
+      />
 
       {photos.length === 0 ? (
         <div className="empty">
@@ -135,6 +167,30 @@ export default function TrenerSylwetkaPodopiecznego() {
         onNavigate={setLightboxId}
       />
     </div>
+  );
+}
+
+/** Okruszki i nagłówek — wspólne dla galerii i dla stanu „nie udostępnia”. */
+function Heading({ trainee, sub }: { trainee: TraineeRef; sub: string }) {
+  return (
+    <>
+      <div className="crumbs">
+        <Link to="/trener/podopieczni">Podopieczni</Link>
+        <span className="sep">›</span>
+        <Link to={`/trener/podopieczni/${trainee.id}`}>{trainee.displayName}</Link>
+        <span className="sep">›</span>
+        <span className="current">Sylwetka</span>
+      </div>
+      <div className="pagehead">
+        <div>
+          <div className="eyebrow" style={{ marginBottom: 6 }}>
+            {trainee.displayName}
+          </div>
+          <h1>Sylwetka</h1>
+          <div className="sub">{sub}</div>
+        </div>
+      </div>
+    </>
   );
 }
 
