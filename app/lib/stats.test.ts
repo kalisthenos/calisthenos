@@ -79,6 +79,7 @@ const PRZEGLAD = {
   },
   videoCoverage: { pct: 25, withVideo: 5, total: 20 },
   bodyPhotoCoverage: {
+    shared: true,
     totalPhotos: 6,
     daysSinceLast: 12,
     views: { front: true, side: true, back: false },
@@ -126,6 +127,28 @@ describe("loadTraineeOverview — przegląd klienta jednym wywołaniem", () => {
     expect(wynik.activePlan?.totals).toEqual({ sets: 120, reps: 900, seconds: 340 });
     expect(wynik.tags.untagged).toBe(3);
     expect(wynik.bodyPhotoCoverage.views.back).toBe(false);
+  });
+
+  it("`bodyPhotoCoverage.shared: false` przechodzi nietknięte — moduł nie zakłada udostępnienia", async () => {
+    // Znaczenie ma wyłącznie `false` (ADR-0047 BE): `true` przeszłoby także przez
+    // mapowanie, które pole gubi albo dopisuje domyślne `true` — a wtedy
+    // `CoverageCard` wzięłaby wartości neutralne za „0 zdjęć" u podopiecznego,
+    // który nie udostępnia trenerowi zdjęć — o ich liczbie kontrakt wtedy milczy.
+    const api = klient(() =>
+      json(200, {
+        ...PRZEGLAD,
+        bodyPhotoCoverage: {
+          shared: false,
+          totalPhotos: 0,
+          daysSinceLast: null,
+          views: { front: false, side: false, back: false },
+        },
+      }),
+    );
+
+    const wynik = await loadTraineeOverview(api, "t-1");
+
+    expect(wynik.bodyPhotoCoverage.shared).toBe(false);
   });
 
   it("liczbę sesji na planie ekran liczy z `doneCount` — kontrakt jej nie niesie", async () => {

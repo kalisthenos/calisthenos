@@ -150,7 +150,60 @@ describe("listAllMyBodyPhotos / listAllTraineeBodyPhotos — sklejone strony", (
     const wynik = await listAllTraineeBodyPhotos(api, "t-1");
 
     expect(sciezka).toBe("/v1/trainees/t-1/body-photos");
-    expect(wynik[0]?.photoUrl).toBe("https://api.kalisthenos.test/v1/files/f-1?exp=1&sig=aa");
+    expect(wynik).toEqual({
+      shared: true,
+      photos: [
+        expect.objectContaining({
+          photoUrl: "https://api.kalisthenos.test/v1/files/f-1?exp=1&sig=aa",
+        }),
+      ],
+    });
+  });
+});
+
+describe("listAllTraineeBodyPhotos — podopieczny, który nie udostępnia zdjęć (ADR-0047 BE)", () => {
+  function nieUdostepnia(): Response {
+    return odmowa(403, "BODY_PHOTOS_NOT_SHARED", "Podopieczny nie udostępnia zdjęć sylwetki.");
+  }
+
+  it("`403 BODY_PHOTOS_NOT_SHARED` wraca jako `{ shared: false }`, nie jako wyjątek", async () => {
+    // To stan ekranu, nie awaria: bez tej gałęzi trener dostawał ekran błędu
+    // zamiast zdania, dlaczego zdjęć nie widzi.
+    const api = klient(() => nieUdostepnia());
+
+    const wynik = await listAllTraineeBodyPhotos(api, "t-1");
+
+    expect(wynik).toEqual({ shared: false });
+  });
+
+  it("odmowa na DALSZEJ stronie też daje `{ shared: false }` — nigdy listy częściowej", async () => {
+    // Zgodę wolno wycofać w trakcie sklejania stron. Strona pobrana przed odmową
+    // pokazana po niej byłaby wglądem, którego zgoda już nie daje.
+    const api = klient((req) =>
+      new URL(req.url).searchParams.get("page") === "1"
+        ? json(200, { ...strona([zdjecie({ id: "bp-1" })], 1, 2, 2), pairs: [] })
+        : nieUdostepnia(),
+    );
+
+    const wynik = await listAllTraineeBodyPhotos(api, "t-1");
+
+    expect(wynik).toEqual({ shared: false });
+  });
+
+  it("inny `403` i `404` lecą ApiError-em — wąsko po kodzie, nie po samym statusie", async () => {
+    // Kontrakt każe rozgałęziać się na `error.code`: ten sam `403` niesie też
+    // naruszenie reguły roli. A cudzy podopieczny (`404`) nie może wyglądać jak
+    // własny, który nie udostępnia — to dwie różne odpowiedzi i dwie różne prawdy.
+    const rola = klient(() => odmowa(403, "ACCESS_DENIED", "Brak dostępu."));
+    const cudzy = klient(() => odmowa(404, "RESOURCE_NOT_FOUND", "Nie znaleziono."));
+
+    const bladRoli = await listAllTraineeBodyPhotos(rola, "t-1").catch((e) => e);
+    const bladCudzego = await listAllTraineeBodyPhotos(cudzy, "t-x").catch((e) => e);
+
+    expect(bladRoli).toBeInstanceOf(ApiError);
+    expect((bladRoli as ApiError).code).toBe("ACCESS_DENIED");
+    expect(bladCudzego).toBeInstanceOf(ApiError);
+    expect((bladCudzego as ApiError).status).toBe(404);
   });
 });
 

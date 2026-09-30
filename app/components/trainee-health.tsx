@@ -409,17 +409,34 @@ export function CoverageCard({
               Zobacz <Icons.Chev />
             </Link>
           </div>
-          <div className="mono" style={{ fontSize: 22, fontWeight: 600 }}>
-            {photos.daysSinceLast == null ? "—" : daysAgo(isoFromDaysAgo(photos.daysSinceLast))}
-          </div>
-          <div className="text-xs muted" style={{ marginTop: 4 }}>
-            ostatnie zdjęcie · {photos.totalPhotos} łącznie
-          </div>
-          <div className="row" style={{ gap: 6, marginTop: 10 }}>
-            <ViewChip label="Przód" on={photos.views.front} />
-            <ViewChip label="Bok" on={photos.views.side} />
-            <ViewChip label="Tył" on={photos.views.back} />
-          </div>
+          {/*
+            `shared` czytane PIERWSZE (ADR-0047 BE): bez zgody na dane o zdrowiu pozostałe
+            pola są neutralne — `0` i trzy „brak ujęcia" — i NIE znaczą „zero zdjęć".
+          */}
+          {photos.shared ? (
+            <>
+              <div className="mono" style={{ fontSize: 22, fontWeight: 600 }}>
+                {photos.daysSinceLast == null ? "—" : daysAgo(isoFromDaysAgo(photos.daysSinceLast))}
+              </div>
+              <div className="text-xs muted" style={{ marginTop: 4 }}>
+                ostatnie zdjęcie · {photos.totalPhotos} łącznie
+              </div>
+              <div className="row" style={{ gap: 6, marginTop: 10 }}>
+                <ViewChip label="Przód" on={photos.views.front} />
+                <ViewChip label="Bok" on={photos.views.side} />
+                <ViewChip label="Tył" on={photos.views.back} />
+              </div>
+            </>
+          ) : (
+            <>
+              <div className="mono" style={{ fontSize: 22, fontWeight: 600 }}>
+                —
+              </div>
+              <div className="text-xs muted" style={{ marginTop: 4 }}>
+                podopieczny nie udostępnia zdjęć
+              </div>
+            </>
+          )}
         </div>
       </div>
     </Section>
