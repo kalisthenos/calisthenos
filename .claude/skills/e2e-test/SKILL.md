@@ -10,9 +10,11 @@ Przepływ: **$ARGUMENTS**
 
 **`tests/e2e` niesie dziś trzy pliki:** `sesja-poza-planem.spec.ts`, `notatki-ai.spec.ts`
 i `rejestracja.spec.ts`. Testy integracyjne na kontenerach zniknęły razem z bazą w segmencie S6
-integracji; ich rolę przejął Playwright przeciw prawdziwemu backendowi. Piszesz więc kolejny
-scenariusz do istniejącego zestawu, nie pierwszy: konwencje ustalił `sesja-poza-planem.spec.ts`
-i stoją w `tests/README.md` — a to, co dołożysz, też będzie kopiowane.
+integracji; ich rolę przejęły dwie rzeczy (`tests/README.md`): testy modułów `app/lib/*.test.ts`
+przeciw podstawionemu klientowi oraz Playwright przeciw prawdziwemu backendowi — ten drugi dla
+przepływów, które muszą przejść przez sieć. Piszesz więc kolejny scenariusz do istniejącego
+zestawu, nie pierwszy: konwencje ustalił `sesja-poza-planem.spec.ts` i stoją w `tests/README.md`
+— a to, co dołożysz, też będzie kopiowane.
 
 ## Czego NIE dowodzić tutaj
 

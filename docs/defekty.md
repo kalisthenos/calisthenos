@@ -394,13 +394,14 @@ BE nie wysyła nowych linków). **Zalecenie: rozstrzygnąć przed otwarciem reje
 
 | Droga | Cena |
 | --- | --- |
-| Własny serwer startowy: `express` + `createRequestHandler` z `@react-router/express` i logger dostępowy maskujący segment tokenu (`/rejestracja/*`, `/zaproszenie/*`); komenda startu zmienia się w `package.json` i w `startCommand` na Railway | **Właściwa dla logu dostępowego.** Decyzja infrastrukturalna Właściciela: nowa komenda startu na Railway i dwie zależności bezpośrednie (`express`, `@react-router/express` — dziś tylko tranzytywne, przez `@react-router/serve`; `npm install` prowadzi Właściciel). Serwer trzeba odtworzyć w całości — kompresja, statyki z nagłówkami cache, nasłuch na `PORT`, zamykanie po `SIGTERM` — bo `react-router-serve` robi dokładnie to |
+| Własny serwer startowy: `express` + `createRequestHandler` z `@react-router/express` i logger dostępowy maskujący segment tokenu (`/rejestracja/*`, `/zaproszenie/*`); skrypt `start` w `package.json` wskazuje na ten serwer | **Właściwa dla logu dostępowego.** Decyzja infrastrukturalna Właściciela. Skrypt `start` zmienia się w jednym miejscu: `startCommand` w `railway.toml:18` i `CMD` w `Dockerfile:58` oba wołają `npm run start`. Ale obraz uruchomieniowy poza manifestem zależności kopiuje wyłącznie `build/` i `public/` z etapu budowania (`Dockerfile:46-47`), a Railway buduje z Dockerfile (`railway.toml:14`) — plik serwera leżący poza `build/` wymaga więc dodatkowego `COPY`, czyli zmiany `Dockerfile` i przebudowy obrazu. Do tego dwie zależności bezpośrednie (`express`, `@react-router/express` — dziś tylko tranzytywne, przez `@react-router/serve`; `npm install` prowadzi Właściciel). Serwer trzeba odtworzyć w całości — kompresja, statyki z nagłówkami cache, nasłuch na `PORT`, zamykanie po `SIGTERM` — bo `react-router-serve` robi dokładnie to |
 | Maskowanie segmentu tokenu w `logUnhandled` | Tania i po naszej stronie: kilka linii i przypadek w `logger.test.ts`. **Zamyka tylko jedno z dwóch miejsc** — log dostępowy `morgan` zostaje |
 | Zostawić | Token w logach platformy do czasu użycia albo wygaśnięcia; kto je czyta, może go wykorzystać |
 
-**Czego dotyka.** Infrastruktura i obserwowalność: komenda startu (`package.json`, `railway.toml`)
-oraz `app/lib/logger.ts` (`logUnhandled`); pośrednio uwierzytelnianie — chodzi o tokeny
-jednorazowych linków z maili. Zmiana komendy startu to decyzja Właściciela.
+**Czego dotyka.** Infrastruktura i obserwowalność: skrypt `start` w `package.json` (`startCommand`
+w `railway.toml` i `CMD` w `Dockerfile` wołają `npm run start`), `Dockerfile` (plik serwera poza
+`build/` wymaga `COPY`) oraz `app/lib/logger.ts` (`logUnhandled`); pośrednio uwierzytelnianie —
+chodzi o tokeny jednorazowych linków z maili. Zmiana startu i obrazu to decyzja Właściciela.
 
 ---
 

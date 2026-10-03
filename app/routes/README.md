@@ -43,10 +43,11 @@ nie na jej tekście.
   w `rejestracja.token.test.ts` (kopie w `rejestracja.test.ts` i `dokumenty.test.ts`). Działają
   te same hooki co w przeglądarce (`useLoaderData`, `useActionData`, `Form`), a przy żądaniu
   `POST` router woła akcję, potem loader. Pierwszy raz dla trasy z danymi — same komponenty
-  sprawdzano dotąd samym `renderToStaticMarkup` (`app/components/ai-notes-panel.test.tsx`).
-  **Czego to nie dowodzi:** statyczny router stoi zawsze w stanie `idle`, więc blokady
-  przycisku na czas wysyłki (`busy`) test nie zobaczy, a `required` i `minLength` blokują
-  wysyłkę dopiero w przeglądarce.
+  sprawdzano dotąd bez routera danych: samym `renderToStaticMarkup`
+  (`app/components/ai-notes-panel.test.tsx`) albo, gdy niosą `<Link>`, w `StaticRouter`
+  (`app/components/trainee-health.test.tsx`). **Czego to nie dowodzi:** statyczny router stoi
+  zawsze w stanie `idle`, więc blokady przycisku na czas wysyłki (`busy`) test nie zobaczy,
+  a `required` i `minLength` blokują wysyłkę dopiero w przeglądarce.
 - **`headers()` trasy łączy `parentHeaders`.** React Router 7.15.1 nie dziedziczy nagłówków
   rodzica: składa je od nowa z tego, co zwróci `headers()` trasy, a z rodzica przenosi tylko
   `Set-Cookie`. Goły obiekt zdejmuje więc ze strony CSP, HSTS, `nosniff` i `Permissions-Policy`
@@ -60,8 +61,10 @@ nie na jej tekście.
   (`throwIfPotentialCSRFAttack`) traktuje je jak obcy origin i odrzuca akcję odpowiedzią `400`;
   wysyłka z JS przechodzi w obu przypadkach, więc błąd nie ujawnia się w zwykłym użyciu.
   `strict-origin` wysyła w `Referer` samo origin — token zostaje na stronie — i zostawia
-  prawdziwy `Origin`. Uzasadnienie: docblock `headers` w `rejestracja.$token.tsx`. **Wyjątek,
-  o którym wiadomo:** `zaproszenie.$token.tsx` też ma token w adresie, a tych nagłówków nie ma
+  prawdziwy `Origin`. Uzasadnienie: docblock `headers` w `rejestracja.$token.tsx`. Nagłówki
+  te nie obejmują strony błędu pod tym samym adresem: gdy loader rzuca, `headers()` trasy nie
+  jest wołane i obowiązują nagłówki roota (D-FE-9 w `docs/defekty.md`). **Wyjątek, o którym
+  wiadomo:** `zaproszenie.$token.tsx` też ma token w adresie, a tych nagłówków nie ma
   (D-FE-10 w `docs/defekty.md`).
 - **Eksport `meta` — pierwszy w trasach.** `rejestracja.$token.tsx` zakazuje indeksowania
   (`robots: noindex` — token w adresie i adres e-mail na stronie) i ustawia tytuł karty;

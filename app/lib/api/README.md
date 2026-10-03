@@ -1,9 +1,10 @@
 # app/lib/api/ — klient backendu i sesja na tokenach
 
 Warstwa, przez którą aplikacja rozmawia z **osobnym backendem** (`calisthenos-be`)
-zamiast z własną bazą. Docelowo moduły w `app/lib/*.ts` biorą pierwszym
-parametrem `api: Api` dokładnie tam, gdzie dziś biorą `db: Db` — ta sama
-konwencja wstrzykiwania, inny typ po drugiej stronie.
+zamiast z własną bazą — tej po stronie FE już nie ma, `db/` zniknął w segmencie S6.
+Moduły w `app/lib/*.ts` biorą pierwszym parametrem `api: Api` dokładnie tam, gdzie
+kiedyś stało `db: Db` — ta sama konwencja wstrzykiwania, inny typ po drugiej stronie;
+żaden moduł nie bierze już `db: Db`.
 
 **Sesji dotyka wyłącznie `middleware.ts`.** Loadery i akcje nie czytają ciastka,
 nie odświeżają tokenu i nie dopisują `Set-Cookie` — dostają gotowe `{ api, user }`

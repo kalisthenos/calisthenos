@@ -94,6 +94,15 @@ Warto o tym wiedzieć, zanim ktoś uzna ją za nową i przypadkową.
    serwerowego w pliku trasy przechodzi `tsc` **bez słowa** i wywala się dopiero na
    `npm run build`. Usuwaj importy, których nie używasz — także te, które „zaraz się przydadzą".
 
+## Trasa z tokenem w adresie i test jej widoku
+
+Konwencje z tras rejestracji stoją w `app/routes/README.md` („Konwencje, które weszły z trasami
+rejestracji”) — tu tylko wskaźnik. **Token w ścieżce** (wzór `rejestracja.$token.tsx`):
+`headers()` z kopią `parentHeaders`, `Referrer-Policy: strict-origin` (nie `no-referrer`)
+i `Cache-Control: no-store`, a `meta` z `noindex`. **Test widoku trasy**: statyczny router
+danych (wzór: `wyrenderuj` w `rejestracja.token.test.ts`), z zakresem ślepoty opisanym
+w tym samym README.
+
 ## UI
 
 Cała warstwa produktu jest **polskojęzyczna**; angielskie zostają tylko nazwy ćwiczeń. Brand
