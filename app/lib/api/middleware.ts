@@ -6,6 +6,7 @@ import { getEnv } from "~/lib/env";
 import { type Api, createApiClient } from "./client";
 import { type AuthUser, apiContext } from "./context";
 import { ApiError, toRouteResponse } from "./errors";
+import { naglowkiPrzekazania } from "./forwarding";
 import { refreshOnce } from "./refresh";
 import {
   type ApiSession,
@@ -64,11 +65,19 @@ export async function apiMiddleware(
   const transport = deps.fetch ?? globalThis.fetch;
   const now = deps.now ?? (() => new Date());
   const baseUrl = getEnv().API_URL;
+  // ADR-0048 (BE): FE woła BE ze swojego serwera, więc bez tych trzech nagłówków BE widzi
+  // adres serwera FE zamiast klienta. Liczone RAZ na żądanie przychodzące i podawane KAŻDEMU
+  // z trzech klientów niżej — anonimowemu, zalogowanemu i temu od wymiany tokenu. Pominięcie
+  // któregokolwiek nie objawia się niczym: BE po cichu liczy ruch tego żądania adresem FE.
+  const przekazanie = naglowkiPrzekazania(request, getEnv().CLIENT_FORWARDING_SECRET);
 
   const zapisana = readSessionCookie(request.headers.get("cookie"));
 
   if (!zapisana) {
-    context.set(apiContext, { api: anonimowyKlient(baseUrl, transport), user: null });
+    context.set(apiContext, {
+      api: anonimowyKlient(baseUrl, transport, przekazanie),
+      user: null,
+    });
     return next();
   }
 
@@ -83,7 +92,12 @@ export async function apiMiddleware(
     const swieza = await refreshOnce(uchwyt.session.refreshToken, {
       exchange: async (refreshToken) => {
         const { data } = await authControllerRefresh({
-          client: createApiClient({ baseUrl, getToken: () => undefined, fetch: transport }),
+          client: createApiClient({
+            baseUrl,
+            getToken: () => undefined,
+            forwardedHeaders: przekazanie,
+            fetch: transport,
+          }),
           body: { refreshToken },
           signal: AbortSignal.timeout(REFRESH_TIMEOUT_MS),
           // Zgodne z `throwOnError: true` już ustawionym w `createApiClient` —
@@ -122,6 +136,7 @@ export async function apiMiddleware(
   const api: Api = createApiClient({
     baseUrl,
     getToken: () => uchwyt.session.accessToken,
+    forwardedHeaders: przekazanie,
     fetch: transportZKopia,
   });
 
@@ -177,7 +192,10 @@ export async function apiMiddleware(
       // wpuszczamy dalej jako anonima i dopinamy czyszczenie w drodze powrotnej.
       if (new URL(request.url).pathname === SCIEZKA_LOGOWANIA) {
         czyscCiastko = true;
-        context.set(apiContext, { api: anonimowyKlient(baseUrl, transport), user: null });
+        context.set(apiContext, {
+          api: anonimowyKlient(baseUrl, transport, przekazanie),
+          user: null,
+        });
       } else {
         return redirect(SCIEZKA_LOGOWANIA, { headers: { "Set-Cookie": clearSessionCookie() } });
       }
@@ -210,9 +228,22 @@ export async function apiMiddleware(
   return response;
 }
 
-/** Klient bez tokenu — dla żądań bez sesji i dla `/login` po jej wygaśnięciu. */
-function anonimowyKlient(baseUrl: string, transport: typeof fetch): Api {
-  return createApiClient({ baseUrl, getToken: () => undefined, fetch: transport });
+/**
+ * Klient bez tokenu — dla żądań bez sesji i dla `/login` po jej wygaśnięciu. Też niesie
+ * nagłówki adresu klienta: to nim idą trasy publiczne (logowanie, rejestracja), a bez tokenu
+ * adres klienta jest jedynym, co BE o wołającym wie — limity i dowód zgody liczą się po nim.
+ */
+function anonimowyKlient(
+  baseUrl: string,
+  transport: typeof fetch,
+  przekazanie: Record<string, string>,
+): Api {
+  return createApiClient({
+    baseUrl,
+    getToken: () => undefined,
+    forwardedHeaders: przekazanie,
+    fetch: transport,
+  });
 }
 
 function naglowkiZTokenem(request_: Request, session: ApiSession): Headers {

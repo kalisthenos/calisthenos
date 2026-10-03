@@ -23,6 +23,18 @@ const BaseEnvSchema = z.object({
    * `getEnv()` na starcie aplikacji.
    */
   API_PUBLIC_URL: z.preprocess((v) => (v === "" ? undefined : v), z.string().url().optional()),
+  /**
+   * Sekret nagłówków adresu klienta do BE (ADR-0048 w BE) — ta sama wartość co w serwisach API
+   * i worker. Wymagany na produkcji: bez niego BE liczy cały web jednym licznikiem.
+   *
+   * Poza produkcją opcjonalny — bez niego FE po prostu nie dokłada nagłówków. Pusty string
+   * znaczy brak (ten sam powód co przy `API_PUBLIC_URL`: `loadEnv` oddaje pustą linię z `.env`
+   * jako `""`), a niepusty krótszy niż 32 znaki jest błędem wszędzie, nie dopiero na produkcji.
+   */
+  CLIENT_FORWARDING_SECRET: z.preprocess(
+    (v) => (v === "" ? undefined : v),
+    z.string().min(32).optional(),
+  ),
   MAX_UPLOAD_BYTES: z.coerce.number().int().positive().default(250_000_000),
   // Osobny, niższy limit dla wideo (nagrania serii, demo ćwiczeń). Długie nagrania
   // z telefonu to główna przyczyna zrywanych uploadów (timeout proxy / OOM przy
@@ -33,7 +45,18 @@ const BaseEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 
-export const EnvSchema = BaseEnvSchema.transform((env) => ({
+export const EnvSchema = BaseEnvSchema.superRefine((env, ctx) => {
+  // Brak sekretu na produkcji nie wywraca żadnej trasy — BE po cichu liczy cały ruch z webu
+  // adresem serwera FE. Dlatego zatrzymuje start (`getEnv()` rzuca w `apiMiddleware`, więc
+  // nie przechodzi nawet `/healthz`), zamiast przejść w ciszy.
+  if (env.NODE_ENV === "production" && !env.CLIENT_FORWARDING_SECRET) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["CLIENT_FORWARDING_SECRET"],
+      message: "Na produkcji wymagany (ADR-0048 w BE).",
+    });
+  }
+}).transform((env) => ({
   ...env,
   API_PUBLIC_URL: env.API_PUBLIC_URL ?? env.API_URL,
 }));

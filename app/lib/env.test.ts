@@ -56,3 +56,69 @@ describe("EnvSchema — adresy BE", () => {
     expect(env.API_PUBLIC_URL).toBe("https://api.kalisthenos.pl");
   });
 });
+
+describe("EnvSchema — sekret nagłówków adresu klienta (ADR-0048 w BE)", () => {
+  const KOMPLET = { ...BAZA, API_URL: "http://api.internal:3000" };
+  const SEKRET = "sekret-przekazywania-co-najmniej-32-znaki";
+
+  /** Ścieżki błędów schematu — pusta lista, gdy konfiguracja przeszła. */
+  async function sciezkiBledow(wejscie: Record<string, string>): Promise<string[]> {
+    const { EnvSchema } = await import("./env");
+    const wynik = EnvSchema.safeParse(wejscie);
+    return wynik.success ? [] : wynik.error.issues.map((i) => i.path.join("."));
+  }
+
+  it("na produkcji bez sekretu odrzuca konfigurację — błąd stoi na tej zmiennej", async () => {
+    // Bez sekretu BE nikomu nie ufa i liczy cały ruch z webu jednym licznikiem — a nic tego
+    // nie zgłasza. Brak ma więc zatrzymać start, nie przejść w ciszy.
+    expect(await sciezkiBledow({ ...KOMPLET, NODE_ENV: "production" })).toEqual([
+      "CLIENT_FORWARDING_SECRET",
+    ]);
+  });
+
+  it("pusty string poza produkcją znaczy brak, nie błąd długości — tak jak w API_PUBLIC_URL", async () => {
+    // `react-router dev` kopiuje CAŁY `.env` do `process.env`, więc pusta linia
+    // `CLIENT_FORWARDING_SECRET=` trafia tu jako `""`, nie jako nieobecny klucz. Bez
+    // `z.preprocess` `.min(32)` odrzucałby ją i wysypywał `getEnv()` — czyli middleware,
+    // a więc każde żądanie — u każdego, kto skopiował `.env.example` i wyczyścił wartość.
+    expect(
+      await sciezkiBledow({ ...KOMPLET, NODE_ENV: "development", CLIENT_FORWARDING_SECRET: "" }),
+    ).toEqual([]);
+  });
+
+  it("pusty string na produkcji nie zastępuje sekretu", async () => {
+    // Zmienna założona w panelu Railway i niewypełniona to nadal brak sekretu.
+    expect(
+      await sciezkiBledow({ ...KOMPLET, NODE_ENV: "production", CLIENT_FORWARDING_SECRET: "" }),
+    ).toEqual(["CLIENT_FORWARDING_SECRET"]);
+  });
+
+  it("na produkcji z sekretem co najmniej 32 znaków przechodzi i zachowuje wartość", async () => {
+    const { EnvSchema } = await import("./env");
+    const wynik = EnvSchema.safeParse({
+      ...KOMPLET,
+      NODE_ENV: "production",
+      CLIENT_FORWARDING_SECRET: SEKRET,
+    });
+    expect(wynik.success).toBe(true);
+    expect(wynik.success ? wynik.data.CLIENT_FORWARDING_SECRET : null).toBe(SEKRET);
+  });
+
+  it("poza produkcją sekret jest opcjonalny — FE po prostu nie dokłada nagłówków", async () => {
+    const { EnvSchema } = await import("./env");
+    const env = EnvSchema.parse({ ...KOMPLET, NODE_ENV: "development" });
+    expect(env.CLIENT_FORWARDING_SECRET).toBeUndefined();
+  });
+
+  it("sekret krótszy niż 32 znaki jest odrzucany także poza produkcją", async () => {
+    // Za krótki sekret to ten sam brak ochrony, tylko z miną ochrony — więc nie czeka na
+    // produkcję, żeby wyjść na jaw.
+    expect(
+      await sciezkiBledow({
+        ...KOMPLET,
+        NODE_ENV: "development",
+        CLIENT_FORWARDING_SECRET: "za-krotki",
+      }),
+    ).toEqual(["CLIENT_FORWARDING_SECRET"]);
+  });
+});
