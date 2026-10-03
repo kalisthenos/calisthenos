@@ -58,6 +58,18 @@ export function parseApiError(status: number, payload: unknown, retryAfter?: num
 }
 
 /**
+ * Treść dla `429` z `Retry-After` (sekundy) albo bez niego — wspólna dla logowania,
+ * przyjęcia zaproszenia i rejestracji, żeby limit brzmiał tak samo na każdym ekranie.
+ *
+ * Minuty zaokrąglane w górę, nie mniej niż jedna: „za 0 min” kazałoby próbować od razu
+ * i dostać to samo. Bez nagłówka nie ma czego liczyć — komunikat ogólny, nigdy „za NaN min”.
+ */
+export function komunikatLimitu(retryAfter: number | undefined): string {
+  if (retryAfter === undefined) return "Za dużo prób. Spróbuj ponownie za chwilę.";
+  return `Za dużo prób. Spróbuj ponownie za ${Math.max(1, Math.ceil(retryAfter / 60))} min.`;
+}
+
+/**
  * Dwie bramki przenoszą się tu z zapytań do bazy na kody HTTP (§4 specu):
  * `403 ONBOARDING_FORM_PENDING` na przekierowanie, `404` na `404`. Reszta idzie
  * dalej z komunikatem BE — obsługuje ją granica błędu trasy.

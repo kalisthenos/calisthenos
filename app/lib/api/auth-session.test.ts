@@ -12,7 +12,14 @@ vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.test" }),
 }));
 
-import { AuthError, acceptInvite, endSession, startSession } from "./auth-session";
+import { RegistrationError } from "../auth/registration";
+import {
+  AuthError,
+  acceptInvite,
+  completeRegistration,
+  endSession,
+  startSession,
+} from "./auth-session";
 import { createApiClient } from "./client";
 import { ApiError } from "./errors";
 
@@ -205,6 +212,133 @@ describe("acceptInvite — przyjęcie zaproszenia", () => {
     }).catch((e: unknown) => e);
 
     expect(blad).toBeInstanceOf(ApiError);
+    expect(blad).not.toBeInstanceOf(AuthError);
+  });
+});
+
+describe("completeRegistration — dokończenie rejestracji trenera", () => {
+  const WEJSCIE = {
+    displayName: "Anna Kowalska",
+    password: "tajne1234",
+    acceptedConsents: [
+      { key: "terms-of-service", versionNumber: 1 },
+      { key: "trainer-dpa", versionNumber: 1 },
+    ],
+  };
+
+  it("wystawia samą sesję z tokenów i wysyła dokładnie nazwę, hasło i zgody", async () => {
+    // Adresu w ciele nie ma: BE bierze go z linku. Pole spoza DTO nie zostałoby zignorowane,
+    // tylko odrzucone (`forbidNonWhitelisted`) — czyli `400`, który unit test z podstawionym
+    // transportem zobaczy dopiero wtedy, gdy ktoś go tu przypnie. Wynik to sama sesja, bez
+    // profilu: ten sam powód co przy `acceptInvite` (role w odpowiedzi typowane szerzej).
+    let opis = "";
+    let cialo: unknown;
+    const api = klient(async (req) => {
+      opis = `${req.method} ${new URL(req.url).pathname}`;
+      cialo = await req.json();
+      return json(200, { accessToken: "A1", refreshToken: "R1", expiresIn: 900, profile: PROFIL });
+    });
+
+    const session = await completeRegistration(api, "tok-1", WEJSCIE, () => TERAZ);
+
+    expect(opis).toBe("POST /v1/registrations/tok-1/complete");
+    expect(cialo).toEqual(WEJSCIE);
+    expect(Object.keys(cialo as Record<string, unknown>).sort()).toEqual([
+      "acceptedConsents",
+      "displayName",
+      "password",
+    ]);
+    expect(session).toEqual({
+      accessToken: "A1",
+      refreshToken: "R1",
+      accessExpiresAt: TERAZ.getTime() + 900_000,
+    });
+  });
+
+  it("`404 REGISTRATION_LINK_NOT_FOUND` to odmowa „link nieważny”", async () => {
+    const api = klient(() =>
+      json(404, { error: { code: "REGISTRATION_LINK_NOT_FOUND", message: "Brak." } }),
+    );
+
+    const blad = await completeRegistration(api, "tok-1", WEJSCIE).catch((e: unknown) => e);
+
+    expect(blad).toBeInstanceOf(RegistrationError);
+    expect((blad as RegistrationError).refusal).toBe("link-invalid");
+    expect((blad as RegistrationError).userMessage).toBe("Link jest nieważny albo wygasł.");
+  });
+
+  it("`409 CONSENT_VERSION_OUTDATED` (z `details`) to odmowa „dokument się zmienił”", async () => {
+    // `details` niesie `key` i `currentVersion`; FE ich nie czyta — po odmowie loader trasy
+    // przeładuje podgląd linku, a ten niesie aktualną listę zgód z numerami wersji.
+    const api = klient(() =>
+      json(409, {
+        error: {
+          code: "CONSENT_VERSION_OUTDATED",
+          message: "Wyszła nowsza wersja zgody.",
+          details: { key: "terms-of-service", currentVersion: 2 },
+        },
+      }),
+    );
+
+    const blad = await completeRegistration(api, "tok-1", WEJSCIE).catch((e: unknown) => e);
+
+    expect(blad).toBeInstanceOf(RegistrationError);
+    expect((blad as RegistrationError).refusal).toBe("consents-changed");
+    expect((blad as RegistrationError).userMessage).toBe(
+      "Dokument się zmienił — zapoznaj się z aktualną wersją.",
+    );
+  });
+
+  it("`400 VALIDATION_FAILED` pokazuje komunikat WŁASNY, nie tekst walidatora z BE", async () => {
+    // BE kładzie w `details.fields` teksty walidatora — hasło po polsku, nazwę po angielsku.
+    // Formularz mówi ogólnie „Sprawdź pola formularza.”: nie miesza języków i nie przepuszcza
+    // cudzej treści, której kształt może się zmienić bez zmiany kontraktu.
+    const api = klient(() =>
+      json(400, {
+        error: {
+          code: "VALIDATION_FAILED",
+          message: "Ładunek nie przechodzi walidacji.",
+          details: {
+            fields: {
+              displayName: ["displayName must be shorter than or equal to 200 characters"],
+            },
+          },
+        },
+      }),
+    );
+
+    const blad = await completeRegistration(api, "tok-1", WEJSCIE).catch((e: unknown) => e);
+
+    expect(blad).toBeInstanceOf(RegistrationError);
+    expect((blad as RegistrationError).refusal).toBe("invalid-input");
+    expect((blad as RegistrationError).userMessage).toBe("Sprawdź pola formularza.");
+  });
+
+  it("`429` niesie minuty z nagłówka — ten sam komunikat limitu co logowanie", async () => {
+    const api = klient(() =>
+      json(
+        429,
+        { error: { code: "RATE_LIMITED", message: "Za dużo prób." } },
+        { "retry-after": "120" },
+      ),
+    );
+
+    const blad = await completeRegistration(api, "tok-1", WEJSCIE).catch((e: unknown) => e);
+
+    expect(blad).toBeInstanceOf(RegistrationError);
+    expect((blad as RegistrationError).refusal).toBe("rate-limited");
+    expect((blad as RegistrationError).userMessage).toBe(
+      "Za dużo prób. Spróbuj ponownie za 2 min.",
+    );
+  });
+
+  it("awaria BE nie zamienia się w odmowę formularza", async () => {
+    const api = klient(() => json(500, { error: { code: "INTERNAL_ERROR", message: "Ups." } }));
+
+    const blad = await completeRegistration(api, "tok-1", WEJSCIE).catch((e: unknown) => e);
+
+    expect(blad).toBeInstanceOf(ApiError);
+    expect(blad).not.toBeInstanceOf(RegistrationError);
     expect(blad).not.toBeInstanceOf(AuthError);
   });
 });
