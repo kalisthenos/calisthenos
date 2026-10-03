@@ -417,7 +417,9 @@ w `railway.toml` i `CMD` w `Dockerfile` wołają `npm run start`), `Dockerfile` 
 chodzi o tokeny jednorazowych linków z maili. Zmiana startu i obrazu to decyzja Właściciela.
 **Po stronie BE** (osobne drzewo, ten sam token): `libs/shared/observability/src/lib/logger.module.ts`
 (`requestSerializer`) w `calisthenos-be` — maskowanie segmentu tokenu na gałęzi
-`chore/domkniecie-tras-rejestracji`; patrz akapit „Zakres” wyżej.
+`chore/domkniecie-tras-rejestracji`; patrz akapit „Zakres” wyżej. **Poza naszym kodem:** logi HTTP brzegu
+Railway prawdopodobnie zapisują ścieżki żądań (niezweryfikowane, 2026-10-03) — ani maskowanie w BE, ani
+własny serwer FE do nich nie sięgają.
 
 ---
 
