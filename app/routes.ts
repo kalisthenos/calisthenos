@@ -5,6 +5,7 @@ export default [
   route("login", "routes/login.tsx"),
   route("rejestracja", "routes/rejestracja.tsx"),
   route("rejestracja/:token", "routes/rejestracja.$token.tsx"),
+  route("dokumenty/:klucz/:wersja", "routes/dokumenty.$klucz.$wersja.tsx"),
   route("wyloguj", "routes/wyloguj.tsx"),
   route("zaproszenie/:token", "routes/zaproszenie.$token.tsx"),
   route("upload/wideo", "routes/upload.wideo.tsx"),
