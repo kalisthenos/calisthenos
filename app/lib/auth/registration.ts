@@ -104,7 +104,10 @@ export async function requestRegistration(api: Api, email: string): Promise<void
 
 /**
  * Podgląd linku — `GET /v1/registrations/{token}`. `null` dla linku nieistniejącego, zamkniętego
- * i wygasłego (jedna odpowiedź BE, reguła D3); `409` — adres tymczasem dostał konto.
+ * i wygasłego (jedna odpowiedź BE, reguła D3). Odmową (`RegistrationError`, przez
+ * `odmowaRejestracji`) wracają: `409 EMAIL_ALREADY_TAKEN` — adres tymczasem dostał konto,
+ * `409 REGISTRATION_CLOSED` — wyłącznik rejestracji, oraz `429` — limit. Cała reszta leci dalej
+ * jako awaria (`ApiError`).
  */
 export async function previewRegistration(
   api: Api,

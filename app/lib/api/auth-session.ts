@@ -132,8 +132,13 @@ export async function acceptInvite(
  * Oddaje **samą sesję**, tak jak `acceptInvite` — profil w odpowiedzi typuje role szerzej niż
  * `MeDto`, więc o sekcji rozstrzyga wąskie `/v1/me` z następnego żądania, nie ta funkcja.
  *
+ * Ciało składane jawnie pole po polu, także zgody: BE odrzuca pola spoza DTO
+ * (`forbidNonWhitelisted`), a zgoda z podglądu linku niesie jeszcze `title` — wołający, który
+ * poda ją wprost, przeszedłby `tsc` (zmienna, nie literał) i dostałby `400` dopiero na żywym BE.
+ * Adresu w ciele nie ma — BE bierze go z linku.
+ *
  * Odmowy dla formularza mapuje `odmowaRejestracji` (krok „dokończenie”); każda inna odpowiedź
- * leci dalej jako `ApiError`. Adresu w ciele nie ma — BE bierze go z linku.
+ * leci dalej jako `ApiError`.
  */
 export async function completeRegistration(
   api: Api,
@@ -149,7 +154,14 @@ export async function completeRegistration(
     const { data } = await registrationsControllerComplete({
       client: api,
       path: { token },
-      body: input,
+      body: {
+        displayName: input.displayName,
+        password: input.password,
+        acceptedConsents: input.acceptedConsents.map(({ key, versionNumber }) => ({
+          key,
+          versionNumber,
+        })),
+      },
       throwOnError: true,
     });
     return sessionFromTokens(data, now());

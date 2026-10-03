@@ -12,7 +12,7 @@ vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.test" }),
 }));
 
-import { RegistrationError } from "../auth/registration";
+import { RegistrationError, type RegistrationPreviewResponse } from "../auth/registration";
 import {
   AuthError,
   acceptInvite,
@@ -252,6 +252,38 @@ describe("completeRegistration — dokończenie rejestracji trenera", () => {
       accessToken: "A1",
       refreshToken: "R1",
       accessExpiresAt: TERAZ.getTime() + 900_000,
+    });
+  });
+
+  it("składa ciało pole po polu — zgoda z podglądu linku nie niesie do BE swojego `title`", async () => {
+    // Zgody przychodzą z podglądu jako `RequiredConsentResponse` (key, versionNumber, title),
+    // a BE przyjmuje `AcceptedConsentDto` bez `title` i odrzuca nadmiarowe pola
+    // (`forbidNonWhitelisted`). Zmienna z nadmiarowym polem przechodzi `tsc` — to nie literał —
+    // więc dopiero ten przypadek pilnuje, że do BE jedzie `{ key, versionNumber }` i nic więcej.
+    const zgodyZPodgladu: RegistrationPreviewResponse["requiredConsents"] = [
+      { key: "terms-of-service", versionNumber: 1, title: "Regulamin" },
+      { key: "trainer-dpa", versionNumber: 1, title: "Umowa powierzenia przetwarzania danych" },
+    ];
+    let cialo: unknown;
+    const api = klient(async (req) => {
+      cialo = await req.json();
+      return json(200, { accessToken: "A1", refreshToken: "R1", expiresIn: 900, profile: PROFIL });
+    });
+
+    await completeRegistration(
+      api,
+      "tok-1",
+      { displayName: "Anna Kowalska", password: "tajne1234", acceptedConsents: zgodyZPodgladu },
+      () => TERAZ,
+    );
+
+    expect(cialo).toEqual({
+      displayName: "Anna Kowalska",
+      password: "tajne1234",
+      acceptedConsents: [
+        { key: "terms-of-service", versionNumber: 1 },
+        { key: "trainer-dpa", versionNumber: 1 },
+      ],
     });
   });
 

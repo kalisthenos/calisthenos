@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { ApiError, parseApiError, toRouteResponse } from "./errors";
+import { ApiError, komunikatLimitu, parseApiError, toRouteResponse } from "./errors";
 
 describe("parseApiError — koperta kontraktu", () => {
   it("wyjmuje kod, komunikat i szczegóły", () => {
@@ -46,6 +46,24 @@ describe("parseApiError — koperta kontraktu", () => {
   it("bez nagłówka zostawia retryAfter pustym, nie zerowym", () => {
     // `0` znaczyłoby „próbuj teraz" — czyli co innego niż „nie wiem".
     expect(parseApiError(500, {}).retryAfter).toBeUndefined();
+  });
+});
+
+describe("komunikatLimitu — treść dla `429`, wspólna dla logowania, zaproszenia i rejestracji", () => {
+  it.each([
+    [
+      "brak nagłówka — ogólnie, nigdy „za NaN min”",
+      undefined,
+      "Za dużo prób. Spróbuj ponownie za chwilę.",
+    ],
+    ["0 s — nie mniej niż minuta", 0, "Za dużo prób. Spróbuj ponownie za 1 min."],
+    ["61 s — minuty zaokrąglane w górę", 61, "Za dużo prób. Spróbuj ponownie za 2 min."],
+    ["120 s — równe minuty bez naddatku", 120, "Za dużo prób. Spróbuj ponownie za 2 min."],
+  ])("%s", (_opis, retryAfter, komunikat) => {
+    // `0` pilnuje `Math.max(1, …)`, `61` pilnuje `Math.ceil`: bez pierwszego komunikat kazałby
+    // próbować „za 0 min”, czyli od razu i na darmo; bez drugiego 61 s znaczyłoby jedną minutę
+    // i użytkownik trafiłby jeszcze w okno limitu.
+    expect(komunikatLimitu(retryAfter)).toBe(komunikat);
   });
 });
 

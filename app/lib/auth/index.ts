@@ -12,7 +12,8 @@
 // Dołączyła rejestracja samoobsługowa trenera (`registration.ts`): zgłoszenie adresu
 // (`requestRegistration`) i podgląd linku (`previewRegistration`). Dokończenie —
 // `completeRegistration` — mieszka w `api/auth-session.ts` obok `acceptInvite`, bo zakłada
-// sesję; odmowy mapuje stąd `odmowaRejestracji`.
+// sesję. Odmowy mapuje `odmowaRejestracji` z `registration.ts`; `auth-session.ts` bierze ją
+// ścieżką wprost (`~/lib/auth/registration`), więc fasada jej nie powtarza.
 
 // Re-export the full auth surface so callers can do `import { ... } from "~/lib/auth"`
 // without picking deep paths. Keep the surface tight; only re-export what consumers
@@ -28,8 +29,6 @@ export {
 export {
   requestRegistration,
   previewRegistration,
-  odmowaRejestracji,
   RegistrationError,
   type RegistrationPreviewResponse,
-  type RegistrationRefusal,
 } from "./registration";
