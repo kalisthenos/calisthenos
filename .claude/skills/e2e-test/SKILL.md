@@ -8,10 +8,11 @@ Przepływ: **$ARGUMENTS**
 
 ## Stan, który trzeba znać od pierwszej minuty
 
-**`tests/e2e` jest dziś PUSTY.** Testy integracyjne na kontenerach zniknęły razem z bazą
-w segmencie S6 integracji; ich rolę ma przejąć Playwright przeciw prawdziwemu backendowi.
-Piszesz więc nie „kolejny test", tylko **pierwszy albo jeden z pierwszych** — i to, co ustalisz
-teraz, będzie kopiowane.
+**`tests/e2e` niesie dziś trzy pliki:** `sesja-poza-planem.spec.ts`, `notatki-ai.spec.ts`
+i `rejestracja.spec.ts`. Testy integracyjne na kontenerach zniknęły razem z bazą w segmencie S6
+integracji; ich rolę przejął Playwright przeciw prawdziwemu backendowi. Piszesz więc kolejny
+scenariusz do istniejącego zestawu, nie pierwszy: konwencje ustalił `sesja-poza-planem.spec.ts`
+i stoją w `tests/README.md` — a to, co dołożysz, też będzie kopiowane.
 
 ## Czego NIE dowodzić tutaj
 

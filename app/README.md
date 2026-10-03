@@ -7,8 +7,8 @@ w `README.md` podkatalogów.
 
 | Plik | Rola |
 |---|---|
-| `root.tsx` | Powłoka dokumentu HTML (locale `pl`, motyw z cookie), globalne providery `ToastProvider` + `ConfirmProvider`, nagłówki bezpieczeństwa (CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy), middleware sesji (`apiMiddleware`), `ErrorBoundary`. Root loader jest pusty — obie leniwe sprzątaczki (sesje, nagrania-sieroty) przeszły na drugą stronę kontraktu. |
-| `routes.ts` | Drzewo tras RR7: top-level (`/`, `login`, `wyloguj`, `zaproszenie/:token`, `upload/wideo`) + prefiksy `trener/*` i `podopieczny/*` z layoutami. Każda nowa trasa musi tu trafić. |
+| `root.tsx` | Powłoka dokumentu HTML (locale `pl`, motyw z cookie), globalne providery `ToastProvider` + `ConfirmProvider`, nagłówki bezpieczeństwa (CSP, HSTS, X-Content-Type-Options, Referrer-Policy, Permissions-Policy — trasa z własnym `headers()` ich NIE dziedziczy, patrz [`routes/README.md`](routes/README.md)), middleware sesji (`apiMiddleware`). Root loader jest pusty — obie leniwe sprzątaczki (sesje, nagrania-sieroty) przeszły na drugą stronę kontraktu. |
+| `routes.ts` | Drzewo tras RR7: top-level (`/`, `login`, `rejestracja`, `rejestracja/:token`, `dokumenty/:klucz/:wersja`, `wyloguj`, `zaproszenie/:token`, `upload/wideo`, `biblioteka-cwiczen`, `healthz`) + prefiksy `trener/*` i `podopieczny/*` z layoutami. Każda nowa trasa musi tu trafić. |
 
 ## Podkatalogi
 

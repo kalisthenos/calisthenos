@@ -202,7 +202,7 @@ app/                  # React Router v7 framework-mode source
   components/         # shared UI (PhotoCard…)
   lib/
     api/              # klient kontraktu BE, sesja na tokenach, middleware rotacji
-    auth/             # zaproszenia trenera (wystawianie i podgląd przez kontrakt)
+    auth/             # zaproszenia i rejestracja trenera (przez kontrakt)
     body-photos.ts
     calendar.ts
     file-uploads.ts
@@ -221,7 +221,7 @@ public/
   manifest.webmanifest
 prototype/            # original React+Babel single-page prototype (reference)
 docs/superpowers/     # spec + plans
-tests/                # miejsce na Playwright e2e (tests/e2e, jeszcze puste)
+tests/                # Playwright e2e przeciw prawdziwemu BE (tests/e2e, trzy pliki)
 Dockerfile            # multi-stage; non-root runtime (Railway uses this)
 railway.toml
 ```
