@@ -57,6 +57,11 @@ const DokonczenieSchema = z.object({
   password: z.string().min(8).max(1024),
 });
 
+/** Identyfikator pola zgody (dla `htmlFor` etykiety); niesie numer wersji jak klucz Reacta. */
+function idZgody(z: { key: string; versionNumber: number }): string {
+  return `dok-zgoda-${z.key}-${z.versionNumber}`;
+}
+
 /** Wartość pola zgody: `klucz:numerWersji` — wersja, którą osoba właśnie widzi. */
 function zgodyZFormularza(
   wartosci: FormDataEntryValue[],
@@ -250,11 +255,12 @@ export default function RejestracjaToken() {
           // Klucz niesie numer wersji: po `consents-changed` loader oddaje nową wersję, a nowy klucz
           // montuje pole od nowa — odznaczone. Zaznaczenie nie przechodzi na dokument, którego
           // człowiek nie widział.
-          <label
+          <div
             key={`${z.key}:${z.versionNumber}`}
             style={{ display: "flex", gap: 8, alignItems: "flex-start", fontSize: 14 }}
           >
             <input
+              id={idZgody(z)}
               type="checkbox"
               name="zgoda"
               value={`${z.key}:${z.versionNumber}`}
@@ -262,12 +268,14 @@ export default function RejestracjaToken() {
               style={{ marginTop: 3 }}
             />
             <span>
-              Akceptuję: {z.title} (
-              {/* `noreferrer`, nie samo `noopener` (reguła `noBlankTarget` w Biome): adres tej strony
-                  niesie token, a odnośnik do dokumentu nie ma go dostać w `Referer`. `aria-label`
-                  zaczyna się od widocznego tekstu (WCAG 2.5.3, „Label in Name”), wskazuje dokument
-                  i uprzedza o nowej karcie — bez niego lista odnośników w czytniku ekranu to samo
-                  „przeczytaj” przy każdej zgodzie. */}
+              <label htmlFor={idZgody(z)}>Akceptuję: {z.title}</label> (
+              {/* Odnośnik stoi POZA etykietą: jego `aria-label` wszedłby tam do nazwy pola wyboru
+                  („Akceptuję: Regulamin (przeczytaj: Regulamin (otwiera się w nowej karcie))”).
+                  `noreferrer`, nie samo `noopener` (reguła `noBlankTarget` w Biome): adres tej
+                  strony niesie token, a odnośnik do dokumentu nie ma go dostać w `Referer`.
+                  `aria-label` zaczyna się od widocznego tekstu (WCAG 2.5.3, „Label in Name”),
+                  wskazuje dokument i uprzedza o nowej karcie — bez niego lista odnośników
+                  w czytniku ekranu to samo „przeczytaj” przy każdej zgodzie. */}
               <a
                 href={`/dokumenty/${z.key}/${z.versionNumber}`}
                 target="_blank"
@@ -278,7 +286,7 @@ export default function RejestracjaToken() {
               </a>
               )
             </span>
-          </label>
+          </div>
         ))}
         {wynik && "blad" in wynik && (
           <p role="alert" style={{ color: "var(--danger)", fontSize: 13, margin: 0 }}>

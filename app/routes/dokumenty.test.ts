@@ -11,12 +11,19 @@ vi.mock("~/lib/env", () => ({
 // zostawałby zielony także po usunięciu przypięcia strefy z trasy. `vi.hoisted` biegnie przed
 // importami. Że Node respektuje zmianę `process.env.TZ` w locie, nie zakładamy po cichu: pilnuje
 // tego przypadek „fixture rozróżnia strefy” niżej.
-vi.hoisted(() => {
+const strefaProcesu = vi.hoisted(() => {
+  const zapamietana = Intl.DateTimeFormat().resolvedOptions().timeZone;
   vi.stubEnv("TZ", "UTC");
+  return zapamietana;
 });
 
 afterAll(() => {
+  // `vi.unstubAllEnvs()` przy niezadeklarowanym TZ robi `delete process.env.TZ`, a Node po jego
+  // usunięciu nie wykrywa strefy systemu na nowo — kolejne pliki tego procesu (`singleFork`)
+  // biegłyby w UTC. Zapamiętana strefa wraca więc jawnie, PRZED sprzątaniem; kanarek to sprawdza.
+  process.env.TZ = strefaProcesu;
   vi.unstubAllEnvs();
+  expect(Intl.DateTimeFormat().resolvedOptions().timeZone).toBe(strefaProcesu);
 });
 
 import { createElement } from "react";
@@ -239,10 +246,11 @@ describe("dokumenty/:klucz/:wersja — widok", () => {
     expect(html).toContain("<h2>1. Postanowienia</h2>");
     expect(html).toContain("<strong>dokumentu</strong>");
     expect(html).toContain("<li>pierwszy</li>");
-    // Treść stoi w elemencie ze stylami dokumentu (`dokument-tresc` w `app/styles/tokens.css`).
-    // Bez klasy Markdown wraca do zerowych marginesów nagłówków, a nic tego nie zgłasza: arkusz
-    // stylów nie ma testu, więc obecność klasy pilnuje tylko ta asercja.
-    expect(html).toMatch(/<div class="dokument-tresc">[\s\S]*<h2>1\. Postanowienia<\/h2>/);
+    // Treść stoi w elemencie ze stylami dokumentu (`dokument-tresc` w `app/styles/tokens.css`):
+    // pierwszy element treści jest jego pierwszym dzieckiem, więc pusty albo wcześnie zamknięty
+    // `div` tego nie spełni. Bez klasy Markdown wraca do zerowych marginesów nagłówków, a nic tego
+    // nie zgłasza — arkusz stylów nie ma testu, więc obecność klasy pilnuje tylko ta asercja.
+    expect(html).toContain('<div class="dokument-tresc"><h2>1. Postanowienia</h2>');
   });
 
   it("fixture rozróżnia strefy: formatter bez przypiętej strefy pokazuje inny dzień niż strona", () => {

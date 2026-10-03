@@ -447,6 +447,13 @@ function pole(html: string, nazwa: string): string {
   return znacznik;
 }
 
+/** Treść etykiety `<label for="…">` pola o danym `id`; błąd, gdy takiej etykiety nie ma. */
+function etykieta(html: string, id: string): string {
+  const tresc = new RegExp(`<label [^>]*for="${id}"[^>]*>(.*?)</label>`).exec(html)?.[1];
+  if (tresc === undefined) throw new Error(`na stronie nie ma etykiety pola „${id}”`);
+  return tresc;
+}
+
 /**
  * Otwierający znacznik `<button>` o danej treści; błąd, gdy go nie ma — asercja o NIEobecności
  * atrybutu przeszłaby pusta, gdyby przycisku nie było.
@@ -530,8 +537,16 @@ describe("rejestracja/:token — widoki stanów", () => {
       // Odznaczone: zgodę człowiek daje sam, po zobaczeniu wersji.
       expect(z).not.toMatch(/\bchecked\b/);
     }
-    expect(html).toContain("Akceptuję: Regulamin");
-    expect(html).toContain("Akceptuję: Umowa powierzenia przetwarzania danych");
+    // Nazwa pola wyboru to treść jego etykiety, a odnośnik „przeczytaj” stoi POZA nią: wewnątrz
+    // jego `aria-label` wszedłby do tej nazwy („Akceptuję: Regulamin (przeczytaj: Regulamin
+    // (otwiera się w nowej karcie))”). Etykieta każdego pola jest znajdowana po jego `id`, więc
+    // brak `id` albo `for` kończy się błędem, nie pustą asercją.
+    const nazwy = zgody.map((z) => etykieta(html, atrybut(z, "id") ?? ""));
+    expect(nazwy).toEqual([
+      "Akceptuję: Regulamin",
+      "Akceptuję: Umowa powierzenia przetwarzania danych",
+    ]);
+    for (const nazwa of nazwy) expect(nazwa).not.toContain("przeczytaj");
     expect(hrefyOdnosnikow(html, "przeczytaj")).toEqual([
       "/dokumenty/terms-of-service/1",
       "/dokumenty/trainer-dpa/1",
@@ -603,10 +618,11 @@ describe("rejestracja/:token — widoki stanów", () => {
 
     const html = await wyrenderuj(context, dokonczenie(POPRAWNE, ZAZNACZONE));
 
-    // Kolejność żądań dowodzi, że loader poszedł PO akcji. Statyczny router przeładowuje loadery
-    // zawsze, więc to nie jest dowód na `shouldRevalidate` (o tym decyduje klient w przeglądarce):
-    // zawężenie go do `consents-changed` zepsułoby ten widok po cichu, a żaden test jednostkowy
-    // tego nie zobaczy. Test pilnuje czegoś innego — że o widoku końcowym rozstrzyga loader.
+    // Kolejność żądań dowodzi, że loader poszedł PO akcji. To nie jest dowód na `shouldRevalidate`:
+    // trasa go dziś nie eksportuje, a statyczny router i tak przeładowuje loadery zawsze (o tym
+    // decyduje klient w przeglądarce). Gdyby trasa dostała `shouldRevalidate` zawężone do
+    // `consents-changed`, ten widok zepsułby się po cichu, a żaden test jednostkowy by tego nie
+    // zobaczył. Test pilnuje czegoś innego — że o widoku końcowym rozstrzyga loader.
     expect(zadania).toEqual([
       "POST /v1/registrations/tok-1/complete",
       "GET /v1/registrations/tok-1",

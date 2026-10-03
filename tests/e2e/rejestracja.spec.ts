@@ -55,10 +55,9 @@ import { expect, test } from "@playwright/test";
  * więc w trakcie wysyłki stary widok nie różni się od nowego, a asercja na widoku po kliknięciu
  * bywa spełniona przez STARY widok i łapie wyłącznie odmowę, która zdążyła się narysować. Router
  * wpisuje wynik akcji do stanu jeszcze w fazie ładowania — to jest powód czekania na aktywny
- * przycisk (komentarz kroku niżej), nie powód, dla którego stary widok spełnia asercję. Wartości
- * pola nie podmieniamy (robiło to wcześniejsze podejście, żeby widok się zmienił): pole jest
- * kontrolowane przez Reacta i wraca do wartości z propsów przy każdym renderze, choćby przy
- * powrocie nawigacji do `idle`.
+ * przycisk (komentarz kroku niżej). Wartości pola nie podmieniamy (robiło to wcześniejsze
+ * podejście, żeby widok się zmienił): pole jest kontrolowane przez Reacta i wraca do wartości
+ * z propsów przy każdym renderze, choćby przy powrocie nawigacji do `idle`.
  *
  * **Czego plik nie dowodzi:** kroku 2 (wyżej); strony ISTNIEJĄCEGO dokumentu (katalog zgód ładuje
  * operator, seeder go nie zakłada, więc test nie ma czego otworzyć); tego, że 404 w scenariuszu 3

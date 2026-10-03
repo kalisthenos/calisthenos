@@ -2050,7 +2050,6 @@ dialog.modal::backdrop {
   margin: 24px 0 8px;
 }
 .dokument-tresc p {
-  margin: 0 0 12px;
   line-height: 1.55;
 }
 .dokument-tresc ul,
@@ -2062,7 +2061,6 @@ dialog.modal::backdrop {
   margin-bottom: 4px;
 }
 .dokument-tresc a {
-  color: var(--ink);
   text-decoration: underline;
   text-underline-offset: 2px;
 }
