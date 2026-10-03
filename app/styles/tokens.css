@@ -2034,3 +2034,33 @@ dialog.modal::backdrop {
     padding-bottom: calc(80px + env(safe-area-inset-bottom));
   }
 }
+
+/* ============== TREŚĆ DOKUMENTU ZGODY ==============
+   Strona `dokumenty/:klucz/:wersja` wypisuje Markdown z katalogu zgód — tekst prawny, który nie
+   niesie własnych styli. Reguły globalne zerują marginesy `h1`–`h4`, a `a` dziedziczy kolor bez
+   podkreślenia, więc bez tego bloku dokument zlewa się w jeden ciąg. Wszystko pod jedną klasą:
+   nic poza `.dokument-tresc` nie zmienia wyglądu. */
+.dokument-tresc {
+  /* Długi adres albo e-mail łamie się, zamiast rozpychać kartę na wąskim ekranie. */
+  overflow-wrap: anywhere;
+}
+.dokument-tresc h2,
+.dokument-tresc h3,
+.dokument-tresc h4 {
+  margin: 24px 0 8px;
+}
+.dokument-tresc p {
+  line-height: 1.55;
+}
+.dokument-tresc ul,
+.dokument-tresc ol {
+  margin: 0 0 12px;
+  padding-left: 24px;
+}
+.dokument-tresc li {
+  margin-bottom: 4px;
+}
+.dokument-tresc a {
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}

@@ -205,6 +205,46 @@ describe("createApiClient", () => {
   });
 });
 
+describe("createApiClient — forwardedHeaders (ADR-0048)", () => {
+  it("dokłada podane nagłówki do KAŻDEGO wywołania, nie tylko do pierwszego", async () => {
+    // Nagłówki siedzą w KONFIGURACJI klienta, a hey-api scala ją z nagłówkami wywołania przy
+    // każdym żądaniu (`beforeRequest`) — więc dostaje je i wywołanie SDK, i surowe `api.get`,
+    // i każde następne. Test pilnuje właśnie „każdego następnego”: nagłówek dopisany tylko
+    // do pierwszego żądania przeszedłby bez objawu, a BE po cichu liczyłby adres serwera FE.
+    const widziane: (string | null)[] = [];
+    const api = createApiClient({
+      baseUrl: "http://be.test",
+      getToken: () => "T",
+      forwardedHeaders: { "x-kth-client-ip": "203.0.113.7" },
+      fetch: async (req) => {
+        widziane.push((req as Request).headers.get("x-kth-client-ip"));
+        return odpowiedz(200, []);
+      },
+    });
+
+    await exerciseCategoriesControllerList({ client: api });
+    await api.get({ url: "/v1/cokolwiek" });
+
+    expect(widziane).toEqual(["203.0.113.7", "203.0.113.7"]);
+  });
+
+  it("bez forwardedHeaders nie dokłada żadnego nagłówka x-kth-*", async () => {
+    const nazwy: string[] = [];
+    const api = createApiClient({
+      baseUrl: "http://be.test",
+      getToken: () => "T",
+      fetch: async (req) => {
+        (req as Request).headers.forEach((_wartosc, nazwa) => nazwy.push(nazwa));
+        return odpowiedz(200, []);
+      },
+    });
+
+    await exerciseCategoriesControllerList({ client: api });
+
+    expect(nazwy.filter((n) => n.startsWith("x-kth-"))).toEqual([]);
+  });
+});
+
 describe("orNull — reguła D3", () => {
   it("404 zamienia na null", async () => {
     // 37 funkcji w `app/lib` deklaruje `Promise<… | null>`, a 40 miejsc w trasach

@@ -99,6 +99,7 @@ Required env vars on Railway:
 | `NODE_ENV` | `production` |
 | `API_URL` | backend URL (Railway private network, if available) |
 | `API_PUBLIC_URL` | public backend URL, for `<img>`/`<video>` `src`; defaults to `API_URL` |
+| `CLIENT_FORWARDING_SECRET` | random secret (32+ chars), the **same** value in the FE, API and worker services (ADR-0048 in `calisthenos-be`). Without it — or with the `zmien-mnie…` example value from `.env.example` — the production deploy never goes healthy: `getEnv()` throws in the middleware, `/healthz` included |
 | `GITHUB_TOKEN` | build-time only — `read:packages` (private `@kalisthenos/api-client`) |
 
 > **Healthcheck:** `healthcheckPath` points at `/healthz` — a resource route
@@ -201,7 +202,7 @@ app/                  # React Router v7 framework-mode source
   components/         # shared UI (PhotoCard…)
   lib/
     api/              # klient kontraktu BE, sesja na tokenach, middleware rotacji
-    auth/             # zaproszenia trenera (wystawianie i podgląd przez kontrakt)
+    auth/             # zaproszenia i rejestracja trenera (przez kontrakt)
     body-photos.ts
     calendar.ts
     file-uploads.ts
@@ -220,7 +221,7 @@ public/
   manifest.webmanifest
 prototype/            # original React+Babel single-page prototype (reference)
 docs/superpowers/     # spec + plans
-tests/                # miejsce na Playwright e2e (tests/e2e, jeszcze puste)
+tests/                # Playwright e2e przeciw prawdziwemu BE (tests/e2e, trzy pliki)
 Dockerfile            # multi-stage; non-root runtime (Railway uses this)
 railway.toml
 ```

@@ -83,8 +83,10 @@ export async function createInvite(
 
 /**
  * Podgląd zaproszenia po SUROWYM tokenie z URL-a (`GET /v1/invites/{token}`) —
- * ekran rejestracji wita po imieniu i podpowiada adres, zanim ktokolwiek jest
- * zalogowany. Jedyne wejście do kontraktu, które biegnie bez tokenu dostępowego.
+ * ekran zaproszenia wita po imieniu i podpowiada adres, zanim ktokolwiek jest
+ * zalogowany. Nie wymaga tokenu dostępowego — tak samo jak wywołania rejestracji
+ * (`registration.ts`), treść dokumentu zgody (`consent-documents.ts`), logowanie
+ * i przyjęcie zaproszenia (`api/auth-session.ts`); nie jest jedynym takim wejściem.
  *
  * `| null` w sygnaturze niesie regułę D3: `404` łapie `orNull`. BE oddaje jeden
  * kod dla zaproszenia nieistniejącego, zużytego i wygasłego, więc rozróżnienia

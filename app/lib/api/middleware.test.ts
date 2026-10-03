@@ -14,10 +14,21 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 // mocka `getEnv()` parsowałoby prawdziwy `process.env`, którego testy nie
 // ustawiają, i każdy z czterech przypadków padałby na `ZodError` zanim
 // dotarłby do właściwej asercji. Ten sam wzorzec co w `files.test.ts`.
+//
+// Sekret nagłówków adresu klienta (ADR-0048) jest tu LITERAŁEM, nie stałą z pliku:
+// `vi.mock` jest wynoszony na górę, więc fabryka nie widzi niczego zadeklarowanego
+// niżej. Ta sama wartość wraca w `SEKRET` poniżej — do asercji.
 vi.mock("~/lib/env", () => ({
-  getEnv: () => ({ API_URL: "http://be.test" }),
+  getEnv: () => ({
+    API_URL: "http://be.test",
+    CLIENT_FORWARDING_SECRET: "sekret-przekazywania-co-najmniej-32-znaki",
+  }),
 }));
 
+import {
+  exerciseCategoriesControllerList,
+  invitesControllerPreview,
+} from "@kalisthenos/api-client";
 import { RouterContextProvider } from "react-router";
 import { apiContext } from "./context";
 import { ApiError } from "./errors";
@@ -44,11 +55,47 @@ function sesja(nadpisz: Partial<ApiSession> = {}): ApiSession {
   };
 }
 
-function zadanie(session: ApiSession | null, sciezka = "/trener"): Request {
-  const naglowki = new Headers();
+/** `dodatkowe` — nagłówki, z którymi żądanie przychodzi do FE od przeglądarki (np. adres klienta). */
+function zadanie(
+  session: ApiSession | null,
+  sciezka = "/trener",
+  dodatkowe: Record<string, string> = {},
+): Request {
+  const naglowki = new Headers(dodatkowe);
   if (session) naglowki.set("cookie", buildSessionCookie(session).split(";")[0]!);
   return new Request(`https://fe.test${sciezka}`, { headers: naglowki });
 }
+
+// Ta sama wartość co w `vi.mock("~/lib/env", …)` na górze pliku — tam musi być literałem.
+const SEKRET = "sekret-przekazywania-co-najmniej-32-znaki";
+
+/** Jak żądanie przychodzi do FE zza brzegu Railway: klient pierwszy w `X-Forwarded-For`. */
+const OD_PRZEGLADARKI = {
+  "x-forwarded-for": "203.0.113.7, 100.64.0.2",
+  "user-agent": "Mozilla/5.0 (test)",
+};
+
+interface NaglowkiAdresu {
+  ip: string | null;
+  ua: string | null;
+  sekret: string | null;
+}
+
+/** Trzy nagłówki ADR-0048 w takiej postaci, w jakiej widzi je BE. */
+function przekazane(req: Request): NaglowkiAdresu {
+  return {
+    ip: req.headers.get("x-kth-client-ip"),
+    ua: req.headers.get("x-kth-client-ua"),
+    sekret: req.headers.get("x-kth-forwarding-secret"),
+  };
+}
+
+/** To, co BE ma zobaczyć, gdy FE dostał żądanie z `OD_PRZEGLADARKI` — dla KAŻDEGO wywołania. */
+const ADRES_KLIENTA: NaglowkiAdresu = {
+  ip: "203.0.113.7",
+  ua: "Mozilla/5.0 (test)",
+  sekret: SEKRET,
+};
 
 /** Serwer atrapowy: liczy wywołania i odpowiada wg ścieżki. */
 function serwer(reguly: (url: string, req: Request, cialo: string) => Response) {
@@ -308,5 +355,165 @@ describe("apiMiddleware — cykl życia sesji w jednym żądaniu", () => {
     const user = context.get(apiContext).user;
     expect(user?.trainerId).toBe("coach-1");
     expect(user?.trainerName).toBe("Jan Trener");
+  });
+});
+
+// FE woła BE ze swojego serwera (ADR-0048 w BE) — bez trzech nagłówków BE widzi adres serwera
+// FE, a limity i dowód zgody liczą wszystkich razem. Pominięcie nie objawia się niczym, więc
+// KAŻDY z trzech klientów budowanych w middleware'ze ma tu własny przypadek: anonimowy,
+// zalogowany (`GET /v1/me`) i wymiana tokenu. Czwarty przypadek to ponowienie po 401, które
+// idzie z klonu i nie przechodzi przez budowę nagłówków drugi raz; piąty — nagłówki `x-kth-*`
+// nadesłane przez przeglądarkę, które nie mogą dotrzeć do BE; szósty — zalogowany niesie naraz
+// `Authorization` i trzy nagłówki adresu (scalanie nagłówków w konfiguracji klienta).
+describe("apiMiddleware — adres klienta w nagłówkach do BE (ADR-0048)", () => {
+  it("klient anonimowy (bez ciastka) niesie adres, przeglądarkę i sekret", async () => {
+    const widziane: Record<string, NaglowkiAdresu> = {};
+    const s = serwer((url, req) => {
+      widziane[url] = przekazane(req);
+      return json(200, {});
+    });
+    const context = new RouterContextProvider();
+
+    await apiMiddleware(
+      { request: zadanie(null, "/rejestracja", OD_PRZEGLADARKI), context },
+      async () => {
+        // Tak woła BE trasa: klientem z kontekstu, nie własnym.
+        await invitesControllerPreview({
+          client: context.get(apiContext).api,
+          path: { token: "t" },
+        });
+        return new Response("ok");
+      },
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(s.trafienia).toEqual(["/v1/invites/t"]);
+    expect(widziane["/v1/invites/t"]).toEqual(ADRES_KLIENTA);
+  });
+
+  it("sesja ważna: GET /v1/me, które woła sam middleware, niesie te same trzy nagłówki", async () => {
+    const widziane: Record<string, NaglowkiAdresu> = {};
+    const s = serwer((url, req) => {
+      widziane[url] = przekazane(req);
+      return json(200, ME);
+    });
+    const context = new RouterContextProvider();
+
+    await apiMiddleware(
+      { request: zadanie(sesja(), "/trener", OD_PRZEGLADARKI), context },
+      async () => new Response("ok"),
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(s.trafienia).toEqual(["/v1/me"]);
+    expect(widziane["/v1/me"]).toEqual(ADRES_KLIENTA);
+  });
+
+  it("sesja do odświeżenia: POST /v1/auth/refresh niesie adres klienta", async () => {
+    // Wymiana tokenu ma własnego klienta (`exchange` w `odswiez`) — osobna ścieżka budowy,
+    // którą łatwo pominąć, bo działa identycznie z nagłówkami i bez nich.
+    const widziane: Record<string, NaglowkiAdresu> = {};
+    const s = serwer((url, req) => {
+      widziane[url] = przekazane(req);
+      return url === "/v1/auth/refresh"
+        ? json(200, { accessToken: "A2", refreshToken: "R2", expiresIn: 900 })
+        : json(200, ME);
+    });
+    const context = new RouterContextProvider();
+    const wygasla = sesja({ accessExpiresAt: TERAZ.getTime() - 1 });
+
+    await apiMiddleware(
+      { request: zadanie(wygasla, "/trener", OD_PRZEGLADARKI), context },
+      async () => new Response("ok"),
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(s.trafienia).toEqual(["/v1/auth/refresh", "/v1/me"]);
+    expect(widziane["/v1/auth/refresh"]).toEqual(ADRES_KLIENTA);
+    // `/v1/me` po rotacji idzie głównym klientem — ten sam adres, nie adres wymiany.
+    expect(widziane["/v1/me"]).toEqual(ADRES_KLIENTA);
+  });
+
+  it("ponowienie po 401 niesie adres klienta tak samo jak pierwsze żądanie", async () => {
+    // Ponowienie buduje `new Request(kopia, { headers })` z klonu żądania, które klient już
+    // zbudował. Przebudowa nagłówków od zera (np. same `authorization`) zgubiłaby trzy
+    // nagłówki tylko na tej ścieżce — i tylko tu BE zobaczyłby adres serwera FE.
+    const mutacje: NaglowkiAdresu[] = [];
+    const s = serwer((url, req) => {
+      if (url === "/v1/auth/refresh") {
+        return json(200, { accessToken: "A2", refreshToken: "R2", expiresIn: 900 });
+      }
+      if (url === "/v1/me") return json(200, ME);
+      mutacje.push(przekazane(req));
+      return mutacje.length === 1 ? json(401, {}) : json(200, {});
+    });
+    const context = new RouterContextProvider();
+
+    await apiMiddleware(
+      { request: zadanie(sesja(), "/trener", OD_PRZEGLADARKI), context },
+      async () => {
+        await context
+          .get(apiContext)
+          .api.post({ url: "/v1/mutacja-testowa", body: { pole: "wartosc" } });
+        return new Response("ok");
+      },
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(mutacje).toEqual([ADRES_KLIENTA, ADRES_KLIENTA]);
+  });
+
+  it("nagłówki x-kth-* nadesłane przez przeglądarkę nie dochodzą do BE — wartości liczy FE", async () => {
+    // Gdyby FE przekazywał dalej cokolwiek, co przyszło od przeglądarki, ta mogłaby podstawić
+    // własny adres RAZEM z sekretem FE dokładanym do każdego wywołania — i obejść każdy limit.
+    const widziane: Record<string, NaglowkiAdresu> = {};
+    const s = serwer((url, req) => {
+      widziane[url] = przekazane(req);
+      return json(200, ME);
+    });
+    const context = new RouterContextProvider();
+    const podszyte = {
+      ...OD_PRZEGLADARKI,
+      "x-kth-client-ip": "198.51.100.1",
+      "x-kth-client-ua": "podstawiona-przegladarka",
+      "x-kth-forwarding-secret": "sekret-podstawiony-przez-przegladarke",
+    };
+
+    await apiMiddleware(
+      { request: zadanie(sesja(), "/trener", podszyte), context },
+      async () => new Response("ok"),
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(widziane["/v1/me"]).toEqual(ADRES_KLIENTA);
+  });
+
+  it("zalogowany: każde wywołanie do BE niesie naraz Authorization i trzy nagłówki adresu", async () => {
+    // `Authorization` dokłada opcja `auth` klienta, trzy nagłówki adresu — jego `headers`; klient
+    // scala jedno z drugim przy każdym żądaniu. Dziś każdy z nich jest dowiedziony osobno (token
+    // — przy ponowieniu po 401 i w `client.test.ts`, adres — w przypadkach wyżej); ten przypadek
+    // pilnuje obu RAZEM, na wywołaniu samego middleware'u (`GET /v1/me`) i na wywołaniu trasy
+    // klientem z kontekstu. Wywołanie trasy idzie funkcją SDK Z deklaracją `security`: bez niej
+    // klient nie dokłada tokenu w ogóle (`invitesControllerPreview` jest publiczne).
+    const widziane: Record<string, NaglowkiAdresu & { authorization: string | null }> = {};
+    const s = serwer((url, req) => {
+      widziane[url] = { ...przekazane(req), authorization: req.headers.get("authorization") };
+      return json(200, url === "/v1/me" ? ME : []);
+    });
+    const context = new RouterContextProvider();
+
+    await apiMiddleware(
+      { request: zadanie(sesja(), "/trener", OD_PRZEGLADARKI), context },
+      async () => {
+        await exerciseCategoriesControllerList({ client: context.get(apiContext).api });
+        return new Response("ok");
+      },
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(s.trafienia).toEqual(["/v1/me", "/v1/exercise-categories"]);
+    const oczekiwane = { ...ADRES_KLIENTA, authorization: "Bearer A1" };
+    expect(widziane["/v1/me"]).toEqual(oczekiwane);
+    expect(widziane["/v1/exercise-categories"]).toEqual(oczekiwane);
   });
 });

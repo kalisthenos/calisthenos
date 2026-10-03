@@ -1,6 +1,7 @@
 import {
   type ActionFunctionArgs,
   Form,
+  Link,
   type LoaderFunctionArgs,
   redirect,
   useActionData,
@@ -100,6 +101,9 @@ export default function Login() {
             Zaloguj
           </button>
         </Form>
+        <p className="muted" style={{ marginTop: 18, fontSize: 13 }}>
+          Nie masz konta? <Link to="/rejestracja">Załóż konto trenera</Link>
+        </p>
       </div>
     </main>
   );

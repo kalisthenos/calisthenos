@@ -27,14 +27,17 @@ import type { EntryDescriptor } from "~/lib/log-draft";
  * Bramka AKCJI ekranu logowania — pierwszy test w `app/routes/podopieczny/`.
  *
  * **Dlaczego istnieje mimo braku testów renderujących.** W tym drzewie nie ma
- * `@testing-library/react`, więc komponentu tej trasy przetestować się nie da —
- * i przez to cały ekran długo nie miał żadnej bramki poza `tsc`. To była zła
- * inferencja: logika, o którą tu chodzi, **nie mieszka w komponencie**. Mieszka
- * w `action`, która jest zwykłą funkcją biorącą `Request` i kontekst. Da się jej
- * dowieść bez przeglądarki, dokładnie tak jak `loader` w
- * `app/routes/biblioteka-cwiczen.test.ts` — `RouterContextProvider` plus
- * `apiContext` z podstawionym transportem. Brak biblioteki do renderowania nie
- * jest więc usprawiedliwieniem dla braku testu akcji.
+ * `@testing-library/react`, więc ZACHOWANIA komponentu tej trasy (kliknięcia, stan
+ * po wpisaniu serii, efekty w przeglądarce) przetestować się tu nie da — i przez to
+ * cały ekran długo nie miał żadnej bramki poza `tsc`. To była zła inferencja: logika,
+ * o którą tu chodzi, **nie mieszka w komponencie**. Mieszka w `action`, która jest
+ * zwykłą funkcją biorącą `Request` i kontekst. Da się jej dowieść bez przeglądarki,
+ * dokładnie tak jak `loader` w `app/routes/biblioteka-cwiczen.test.ts` —
+ * `RouterContextProvider` plus `apiContext` z podstawionym transportem. Brak biblioteki
+ * do renderowania nie jest więc usprawiedliwieniem dla braku testu akcji.
+ * (Sam kształt widoku w spoczynku da się sprawdzić statycznym routerem danych —
+ * pomocnik `wyrenderuj` w `app/routes/rejestracja.token.test.ts` — czego ten ekran
+ * dotąd nie ma; zachowania to nie zastępuje.)
  *
  * **Co jest tu stawką.** Akcja liczy `allDone`, czyli to, czy sesja planu
  * policzy się jako zrobiona. Regresja w tym rachunku jest NIEWIDOCZNA aż do

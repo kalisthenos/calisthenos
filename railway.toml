@@ -34,6 +34,8 @@ restartPolicyMaxRetries = 5
 #   NODE_ENV              → production
 #   API_URL               → adres BE (sieć prywatna Railway, jeśli dostępna)
 #   API_PUBLIC_URL        → publiczny adres BE (dla <img>/<video>); domyślnie = API_URL
+#   CLIENT_FORWARDING_SECRET → losowy sekret (min. 32 znaki), TA SAMA wartość w serwisach FE,
+#                           API i worker (ADR-0048 w BE); bez niego FE na produkcji nie wstaje
 #   GITHUB_TOKEN          → build-time, read:packages (prywatny @kalisthenos/api-client)
 #
 # Opcjonalne: MAX_UPLOAD_BYTES, MAX_VIDEO_UPLOAD_BYTES (limity walidowane też

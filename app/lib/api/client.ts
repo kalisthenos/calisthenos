@@ -19,11 +19,27 @@ export interface ApiClientOptions {
    * sesji. Domknięta wartość sprawiłaby, że ponowienie idzie ze starym tokenem.
    */
   getToken: () => string | undefined;
+  /**
+   * Nagłówki dokładane do KAŻDEGO wywołania (ADR-0048 w BE): adres i przeglądarka klienta
+   * oraz sekret, którym BE odróżnia serwer FE od kogoś, kto by je podstawił. Liczy je
+   * `naglowkiPrzekazania` raz na żądanie przychodzące do FE — klient niczego nie wyprowadza.
+   *
+   * Idą w konfiguracji klienta, nie przez opakowanie `fetch`: hey-api scala `headers`
+   * konfiguracji z nagłówkami wywołania przy każdym żądaniu, więc dostaje je także wywołanie
+   * z własnymi (`Content-Type`, `Authorization`), a ponowienie po `401` — klonowane z żądania,
+   * które klient już zbudował — niesie je w sobie.
+   */
+  forwardedHeaders?: Record<string, string>;
   /** Podstawiany wyłącznie w testach; produkcyjnie `globalThis.fetch`. */
   fetch?: typeof fetch;
 }
 
-export function createApiClient({ baseUrl, getToken, fetch: transport }: ApiClientOptions): Api {
+export function createApiClient({
+  baseUrl,
+  getToken,
+  forwardedHeaders,
+  fetch: transport,
+}: ApiClientOptions): Api {
   const api = createClient(
     createConfig({
       baseUrl: baseUrl ?? getEnv().API_URL,
@@ -31,6 +47,7 @@ export function createApiClient({ baseUrl, getToken, fetch: transport }: ApiClie
       // do trasy, gdzie `toRouteResponse` zamienia go na `Response`.
       throwOnError: true,
       auth: () => getToken(),
+      ...(forwardedHeaders ? { headers: forwardedHeaders } : {}),
       ...(transport ? { fetch: transport } : {}),
     }),
   );

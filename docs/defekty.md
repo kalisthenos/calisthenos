@@ -321,3 +321,179 @@ w interfejsie podopiecznego.
 | Dołożyć akcję na ekranie podopiecznego, wzorem ekranu trenera | Niska: `setActionItemStatus` w module jest gotowe, trasa BE też. Koszt: akcja trasy i przycisk w liście. |
 | Zmienić `docs/01` i kontrakt tak, żeby to była funkcja wyłącznie trenera | Uczciwa alternatywa, jeśli taka jest intencja — ale wtedy trasa BE traci rolę `trainee`, a to jest zmiana kontraktu, nie uproszczenie ekranu. |
 | Zostawić | Trasa BE ma dziś rolę, której nikt nie używa — czyli powierzchnię bez konsumenta. |
+
+---
+
+## D-FE-7 · Martwa sesja na trasie publicznej odsyła na `/login` — link z maila ląduje na logowaniu
+
+**Kontekst:** sesja · middleware · **Status:** **otwarty** · **istnieje PRZED gałęzią
+`feat/rejestracja-trenera`** · **Zgłoszony:** 2026-10-03, przy trasach rejestracji
+
+**Objaw.** Osoba, która ma w przeglądarce ciastko `__Host-kth_api` z sesją martwą (wygasłą albo
+odwołaną po stronie BE), klika link z maila — `/rejestracja/:token` albo `/zaproszenie/:token` — i
+widzi ekran logowania zamiast strony z linku. Link nie jest przy tym zużyty (przekierowanie zapada,
+zanim ruszy loader), a **drugie kliknięcie działa**: pierwsze odpowiedziało czyszczeniem ciastka,
+więc drugie przychodzi już anonimowo. Kto nie wie, że ma kliknąć jeszcze raz, uzna link za zepsuty.
+
+**Przyczyna.** `app/lib/api/middleware.ts:188–201`. Gdy odświeżenie albo `GET /v1/me` kończy się
+`401`, middleware wpuszcza żądanie anonimowo (i czyści ciastko w drodze powrotnej) **wyłącznie na
+`/login`** — tam trasa musi się wyrenderować, inaczej wyszłaby pętla przekierowań. Każda inna
+ścieżka, także publiczna, dostaje `redirect("/login")` z `Set-Cookie` czyszczącym. Dla tras
+chronionych to zachowanie zamierzone i przypięte testem (`middleware.test.ts`, „martwy token
+odświeżający czyści ciastko i odsyła na logowanie”); wyjątek jest jeden i wpisany z nazwy, więc
+trasy publiczne z tokenem w adresie go nie mają.
+
+**Czy da się dziś osiągnąć:** tak — wystarczy martwe ciastko w przeglądarce, z której otwiera się
+link. `/zaproszenie/:token` dotyczy to już dziś, `/rejestracja/:token` — od otwarcia rejestracji
+(`REGISTRATION_OPEN=true` w serwisie API). Potwierdzone czytaniem kodu i testu, nie odtworzone
+w przeglądarce.
+
+**Propozycja naprawy i jej cena.**
+
+| Droga | Cena |
+| --- | --- |
+| Lista tras publicznych traktowanych jak `/login`: martwa sesja → ciastko czyszczone, żądanie wpuszczone anonimowo | **Proponowana.** Mała zmiana w jednym miejscu, ale lista żyje poza tabelą tras (`app/routes.ts`): pominięcie nowej trasy publicznej nie objawia się niczym, dopóki nie trafi na nią ktoś z martwym ciastkiem. Wymaga przypadku na każdą pozycję (jak dziś na `/login`) i takiego, który porównuje listę z trasami publicznymi w `routes.ts` — inaczej pominięcie nie umie się zapalić |
+| Zostawić | Link z maila działa dopiero za drugim kliknięciem; pierwsze kończy się ekranem logowania |
+
+**Czego dotyka.** Uwierzytelnianie i sesja — powierzchnia ryzyka. `app/lib/api/middleware.ts` (gałąź
+`401` w `apiMiddleware`) i `middleware.test.ts`; trasy publiczne `/rejestracja`, `/rejestracja/:token`,
+`/dokumenty/:klucz/:wersja` i `/zaproszenie/:token`. **Nie naprawiaj tego przy okazji innego
+zadania** — osobny `/fix` z pytaniem o bramkę; decyzja Właściciela.
+
+---
+
+## D-FE-8 · Token z adresu strony ląduje w logach serwera FE
+
+**Kontekst:** logi · serwer produkcyjny · **Status:** **otwarty** · **istnieje PRZED gałęzią
+`feat/rejestracja-trenera`** (ta dołożyła drugi adres z tokenem, `/rejestracja/:token`) ·
+**Zgłoszony:** 2026-10-03, przy trasach rejestracji
+
+**Objaw.** Każde żądanie pod adres z tokenem — `GET /rejestracja/<token>`, `GET /zaproszenie/<token>`,
+także `POST` tego samego adresu — zostaje w logach serwisu FE na Railway z **pełnym tokenem**. Token
+jest jednorazowy i krótkożyjący (link rejestracji działa 24 godziny — tak mówi ekran „Link jest
+nieważny albo wygasł” — a zaproszenie do swojego `expiresAt`), ale do chwili użycia albo wygaśnięcia
+każdy z dostępem do tych logów może zrobić z nim to, co adresat linku: dokończyć rejestrację
+(`POST /v1/registrations/{token}/complete`) albo przyjąć zaproszenie (`POST /v1/invites/{token}/accept`)
+z własnym hasłem.
+
+**Przyczyna.** `npm start` to `react-router-serve ./build/server/index.js` (`package.json`;
+`startCommand` w `railway.toml` woła `npm run start`), a `react-router-serve` 7.15.1 ma na sztywno
+`app.use(morgan("tiny"))` (`node_modules/@react-router/serve/dist/cli.js:130`). Format `tiny` to
+`:method :url :status :res[content-length] - :response-time ms`, a `:url` jest adresem żądania ze
+ścieżką — więc z tokenem. Serwer nie ma żadnej opcji logu: `cli.js` czyta wyłącznie `PORT`, `HOST`
+i `NODE_ENV`. Drugie miejsce leży już po naszej stronie: `logUnhandled` (`app/lib/logger.ts:68-77`,
+wołane z `handleError` w `app/entry.server.tsx`) zapisuje `path` żądania przy każdym nieobsłużonym
+błędzie (`500`) — też z segmentem tokenu.
+
+**Czy da się dziś osiągnąć:** tak, przy każdym otwarciu takiego linku. `/zaproszenie/<token>` — już
+dziś; `/rejestracja/<token>` — od chwili, gdy BE zacznie wysyłać linki (`REGISTRATION_OPEN=true`
+w serwisie API; przy `false` trzy trasy rejestracji odpowiadają `409 REGISTRATION_CLOSED`, więc
+BE nie wysyła nowych linków). **Zalecenie: rozstrzygnąć przed otwarciem rejestracji.**
+
+**Propozycja naprawy i jej cena.**
+
+| Droga | Cena |
+| --- | --- |
+| Własny serwer startowy: `express` + `createRequestHandler` z `@react-router/express` i logger dostępowy maskujący segment tokenu (`/rejestracja/*`, `/zaproszenie/*`); skrypt `start` w `package.json` wskazuje na ten serwer | **Właściwa dla logu dostępowego.** Decyzja infrastrukturalna Właściciela. Skrypt `start` zmienia się w jednym miejscu: `startCommand` w `railway.toml:18` i `CMD` w `Dockerfile:58` oba wołają `npm run start`. Ale obraz uruchomieniowy poza manifestem zależności kopiuje wyłącznie `build/` i `public/` z etapu budowania (`Dockerfile:46-47`), a Railway buduje z Dockerfile (`railway.toml:14`) — plik serwera leżący poza `build/` wymaga więc dodatkowego `COPY`, czyli zmiany `Dockerfile` i przebudowy obrazu. Do tego dwie zależności bezpośrednie (`express`, `@react-router/express` — dziś tylko tranzytywne, przez `@react-router/serve`; `npm install` prowadzi Właściciel). Serwer trzeba odtworzyć w całości — kompresja, statyki z nagłówkami cache, nasłuch na `PORT`, zamykanie po `SIGTERM` — bo `react-router-serve` robi dokładnie to |
+| Maskowanie segmentu tokenu w `logUnhandled` | Tania i po naszej stronie: kilka linii i przypadek w `logger.test.ts`. **Zamyka tylko jedno z dwóch miejsc** — log dostępowy `morgan` zostaje |
+| Zostawić | Token w logach platformy do czasu użycia albo wygaśnięcia; kto je czyta, może go wykorzystać |
+
+**Zakres — uzupełnienie 2026-10-03, z przeglądu całości gałęzi `feat/rejestracja-trenera`.** Token
+trafiał też do logu żądań **BE**, nie tylko FE: `requestSerializer` w
+`calisthenos-be/libs/shared/observability/src/lib/logger.module.ts` zapisuje `req.url` bez zmian
+(przycina go wyłącznie dla callbacku OAuth i tras plików), więc wołania, które serwer FE robi do BE
+— m.in. `GET /v1/registrations/<token>`, `POST /v1/registrations/<token>/complete` i
+`POST /v1/invites/<token>/accept` — zostawiały w logu API pełny token w ścieżce. W tej samej rundzie
+gałąź BE `chore/domkniecie-tras-rejestracji` dostaje maskowanie segmentu tokenu w tym logu (trasy
+rejestracji i zaproszeń). **Po scaleniu obu gałęzi BE przestaje być miejscem, w którym token leży
+w logach; zostaje strona FE** — `morgan("tiny")` w `react-router-serve`, jedyna kopia zapisywana przy
+KAŻDYM żądaniu, oraz `logUnhandled`, tylko przy `500`. Naprawa po stronie FE (pierwsza droga z tabeli,
+własny serwer startowy) jest więc dalej potrzebna, a zalecenie „rozstrzygnąć przed otwarciem
+rejestracji” nie traci mocy.
+
+**Czego dotyka.** Infrastruktura i obserwowalność: skrypt `start` w `package.json` (`startCommand`
+w `railway.toml` i `CMD` w `Dockerfile` wołają `npm run start`), `Dockerfile` (plik serwera poza
+`build/` wymaga `COPY`) oraz `app/lib/logger.ts` (`logUnhandled`); pośrednio uwierzytelnianie —
+chodzi o tokeny jednorazowych linków z maili. Zmiana startu i obrazu to decyzja Właściciela.
+**Po stronie BE** (osobne drzewo, ten sam token): `libs/shared/observability/src/lib/logger.module.ts`
+(`requestSerializer`) w `calisthenos-be` — maskowanie segmentu tokenu na gałęzi
+`chore/domkniecie-tras-rejestracji`; patrz akapit „Zakres” wyżej. **Poza naszym kodem:** logi HTTP brzegu
+Railway prawdopodobnie zapisują ścieżki żądań (niezweryfikowane, 2026-10-03) — ani maskowanie w BE, ani
+własny serwer FE do nich nie sięgają.
+
+---
+
+## D-FE-9 · Nagłówki strony z tokenem nie obejmują jej strony błędu
+
+**Kontekst:** nagłówki · strona z tokenem · **Status:** **otwarty** · **wprowadzony przez gałąź
+`feat/rejestracja-trenera`** (ona dodała `headers()` na tej stronie) · **Zgłoszony:** 2026-10-03,
+przy trasach rejestracji
+
+**Objaw.** `headers()` w `app/routes/rejestracja.$token.tsx` ustawia `Referrer-Policy: strict-origin`
+i `Cache-Control: no-store`, ale **nie jest stosowane, gdy loader kończy się błędem** (np. awaria BE →
+`500`) i rysuje się granica błędu. Strona pod adresem z tokenem nie ma wtedy ani `no-store`, ani
+`strict-origin` — zostaje `strict-origin-when-cross-origin` z `root.tsx`.
+
+**Przyczyna.** React Router składa nagłówki dokumentu z tras od korzenia do **granicy błędu
+włącznie** (`getDocumentHeadersImpl` w `node_modules/react-router/dist/development/index.js:807`:
+`matches` ucięte do `boundaryIdx + 1`), więc funkcja `headers` trasy leżącej niżej niż granica nie
+jest wołana. Trasa z tokenem nie ma własnego `ErrorBoundary`, a root jest granicą zawsze
+(`hasErrorBoundary: route.id === "root" || …`, `index.js:721`; `app/root.tsx` własnego nie eksportuje,
+więc rysuje domyślną) — granicą jest więc root i obowiązują wyłącznie jego nagłówki.
+
+**Czy da się dziś osiągnąć:** tak — przy każdej awarii BE w czasie podglądu linku (`previewRegistration`
+rzuca `ApiError` inny niż odmowa rejestracji, a loader puszcza go dalej). Potwierdzone czytaniem
+`getDocumentHeadersImpl`, nie odtworzone żądaniem. **Ryzyko niskie:** strona błędu nie niesie danych,
+a przy polityce `strict-origin-when-cross-origin` obca domena dostaje w `Referer` samo origin, bez
+ścieżki — token nie wycieka; pełny adres idzie wyłącznie do własnego origin.
+
+**Propozycja naprawy i jej cena.**
+
+| Droga | Cena |
+| --- | --- |
+| Nagłówki ustawiane w middleware dla ścieżek z tokenem (`/rejestracja/:token`, `/zaproszenie/:token`), w drodze powrotnej — niezależnie od tego, która granica rysuje stronę | **Proponowana.** Dotyka `apiMiddleware`, czyli powierzchni uwierzytelniania, a lista ścieżek z tokenem żyje poza tabelą tras: pominięcie nowej nie objawia się niczym |
+| Własny `ErrorBoundary` na trasie z tokenem — granicą staje się wtedy sama trasa, więc jej `headers()` wchodzi do składania nagłówków | Wyprowadzone z lektury `getDocumentHeadersImpl`, **niemierzone** — do potwierdzenia testem przy naprawie. Daje przy okazji polski ekran błędu zamiast domyślnego angielskiego, ale to nowy ekran do zaprojektowania: `root.tsx` go nie ma (`docs/audyt.md`, znalezisko 5) |
+| Zostawić | Strona błędu pod adresem z tokenem bez `no-store` i `strict-origin`; przy ryzyku niskim to uczciwa opcja |
+
+**Czego dotyka.** `app/routes/rejestracja.$token.tsx` (`headers`), `app/root.tsx` (brak własnej
+granicy błędu), przy pierwszej drodze także `apiMiddleware` — uwierzytelnianie jest powierzchnią
+ryzyka, więc to ruch na `/fix` albo `/change` z decyzją Właściciela.
+
+---
+
+## D-FE-10 · `/zaproszenie/:token` bez nagłówków strony z tokenem w adresie
+
+**Kontekst:** nagłówki · strona zaproszenia · **Status:** **otwarty** · **istnieje PRZED gałęzią
+`feat/rejestracja-trenera`** · **Zgłoszony:** 2026-10-03, przy trasach rejestracji · **Lustro:**
+`D-34` w `calisthenos-be/docs/defekty.md` (zgłoszone tam przez plan BE; naprawa należy do tego drzewa)
+
+**Objaw.** Token zaproszenia stoi w ścieżce adresu, a strona `/zaproszenie/:token` — z adresem
+e-mail zaproszonego na ekranie (pole tylko do odczytu) — nie ma własnych nagłówków ani `meta`: nie
+niesie `Referrer-Policy: strict-origin`, `Cache-Control: no-store` ani
+`<meta name="robots" content="noindex">`, które ma nowa strona `/rejestracja/:token`. Dziedziczy
+globalne `Referrer-Policy: strict-origin-when-cross-origin` z `root.tsx`. Osobno: przycisk
+„Załóż konto” nie jest blokowany na czas wysyłki (trasa nie czyta `useNavigation`, przycisk nie ma
+`disabled`), więc podwójne kliknięcie wysyła akcję dwa razy — drugie żądanie trafia na zaproszenie
+już zużyte, choć konto powstało przy pierwszym (ten sam przypadek opisuje komentarz przy `busy`
+w `rejestracja.$token.tsx`).
+
+**Przyczyna.** `app/routes/zaproszenie.$token.tsx` eksportuje wyłącznie `loader`, `action` i
+komponent — ani `headers`, ani `meta`. Trasa bez `headers` dziedziczy nagłówki rodzica, czyli to,
+co niesie `root.tsx`.
+
+**Czy da się dziś osiągnąć — i jak daleko.** Zawsze: nagłówków nie ma w ogóle. Przy dzisiejszej
+polityce cudzy origin dostaje w `Referer` sam origin FE, bez ścieżki, więc token nie opuszcza FE tą
+drogą; pełny adres z tokenem idzie wyłącznie do własnego origin (zasoby strony, ich dzienniki) — to
+obrona w głąb, nie otwarta dziura (analiza w BE, `D-34`). Bez `no-store` strona z adresem e-mail
+zaproszonego może zostać w pamięci pośredników.
+
+**Propozycja naprawy i jej cena.**
+
+| Droga | Cena |
+| --- | --- |
+| Wzorem `rejestracja.$token.tsx`: `headers({ parentHeaders })` zaczynające od kopii `parentHeaders` (inaczej strona traci CSP, HSTS, `nosniff` i `Permissions-Policy` z `root.tsx`) i ustawiające `Referrer-Policy: strict-origin` oraz `Cache-Control: no-store`; `meta` z `robots: noindex`; blokada przycisku na czas nawigacji (`navigation.state !== "idle"`) | Mała zmiana w jednej trasie, bez kontraktu i bez zmiany logiki. Procedura `calisthenos-fe:route`; test — te same przypadki co w bloku „nagłówki i meta” z `rejestracja.token.test.ts`, w `zaproszenie.test.ts`. **`strict-origin`, NIE `no-referrer`:** natywny POST przyjęcia zaproszenia (bez JS albo przed hydratacją) dostałby `Origin: null`, a kontrola CSRF React Routera odrzuciłaby go odpowiedzią `400` |
+| Zostawić | Obrona w głąb niewykorzystana; strona z adresem e-mail może zostać w pamięci pośredników |
+
+**Czego dotyka.** `app/routes/zaproszenie.$token.tsx` i `zaproszenie.test.ts`; nie dotyka kontraktu.
+Wpis lustrzany w BE — `D-34` w `calisthenos-be/docs/defekty.md`; jego „Poprawka zalecenia,
+2026-10-03” opisuje, dlaczego pierwotne `no-referrer` było błędne.

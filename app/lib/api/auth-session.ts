@@ -2,10 +2,12 @@ import {
   authControllerLogin,
   authControllerLogout,
   invitesControllerAccept,
+  registrationsControllerComplete,
 } from "@kalisthenos/api-client";
+import { odmowaRejestracji } from "~/lib/auth/registration";
 import type { Api } from "./client";
 import type { AuthUser } from "./context";
-import { ApiError } from "./errors";
+import { ApiError, komunikatLimitu } from "./errors";
 import { type ApiSession, sessionFromTokens } from "./session";
 
 const NIEPOPRAWNE_DANE = "Niepoprawne dane logowania.";
@@ -29,13 +31,12 @@ export class AuthError extends Error {
   }
 }
 
-/** Wspólne dla logowania i przyjęcia zaproszenia — oba mają ten sam limit w BE. */
+/**
+ * Wspólne dla logowania i przyjęcia zaproszenia — oba mają ten sam limit w BE. Treść liczy
+ * `komunikatLimitu`, wspólna też z rejestracją, która niesie własny typ odmowy.
+ */
 function limitPrzekroczony(retryAfter: number | undefined): AuthError {
-  if (retryAfter === undefined) {
-    return new AuthError("rate limited", "Za dużo prób. Spróbuj ponownie za chwilę.");
-  }
-  const minuty = Math.max(1, Math.ceil(retryAfter / 60));
-  return new AuthError("rate limited", `Za dużo prób. Spróbuj ponownie za ${minuty} min.`);
+  return new AuthError("rate limited", komunikatLimitu(retryAfter));
 }
 
 /**
@@ -121,6 +122,51 @@ export async function acceptInvite(
     }
     if (e instanceof ApiError && e.status === 429) throw limitPrzekroczony(e.retryAfter);
     throw e;
+  }
+}
+
+/**
+ * Dokańcza rejestrację trenera z linku z maila (`POST /v1/registrations/{token}/complete`):
+ * BE zakłada konto, zapisuje zgody z numerami wersji, które człowiek widział, i wystawia sesję.
+ *
+ * Oddaje **samą sesję**, tak jak `acceptInvite` — profil w odpowiedzi typuje role szerzej niż
+ * `MeDto`, więc o sekcji rozstrzyga wąskie `/v1/me` z następnego żądania, nie ta funkcja.
+ *
+ * Ciało składane jawnie pole po polu, także zgody: BE odrzuca pola spoza DTO
+ * (`forbidNonWhitelisted`), a zgoda z podglądu linku niesie jeszcze `title` — wołający, który
+ * poda ją wprost, przeszedłby `tsc` (zmienna, nie literał) i dostałby `400` dopiero na żywym BE.
+ * Adresu w ciele nie ma — BE bierze go z linku.
+ *
+ * Odmowy dla formularza mapuje `odmowaRejestracji` (krok „dokończenie”); każda inna odpowiedź
+ * leci dalej jako `ApiError`.
+ */
+export async function completeRegistration(
+  api: Api,
+  token: string,
+  input: {
+    displayName: string;
+    password: string;
+    acceptedConsents: { key: string; versionNumber: number }[];
+  },
+  now: () => Date = () => new Date(),
+): Promise<ApiSession> {
+  try {
+    const { data } = await registrationsControllerComplete({
+      client: api,
+      path: { token },
+      body: {
+        displayName: input.displayName,
+        password: input.password,
+        acceptedConsents: input.acceptedConsents.map(({ key, versionNumber }) => ({
+          key,
+          versionNumber,
+        })),
+      },
+      throwOnError: true,
+    });
+    return sessionFromTokens(data, now());
+  } catch (e) {
+    throw odmowaRejestracji(e, "dokonczenie") ?? e;
   }
 }
 
