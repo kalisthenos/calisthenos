@@ -372,11 +372,15 @@ describe("rejestracja/:token — nagłówki i meta", () => {
     );
   }
 
-  it("odpowiada z Referrer-Policy: no-referrer i Cache-Control: no-store", () => {
+  it("odpowiada z Referrer-Policy: strict-origin i Cache-Control: no-store", () => {
     const naglowki = naglowkiStrony();
 
-    // `no-referrer` wygrywa z polityką rodzica (`strict-origin-when-cross-origin` z `root.tsx`).
-    expect(naglowki.get("referrer-policy")).toBe("no-referrer");
+    // `strict-origin` wygrywa z polityką rodzica (`strict-origin-when-cross-origin` z `root.tsx`),
+    // która przy żądaniach na ten sam origin wysyła w `Referer` PEŁNY adres — a ten niesie token.
+    // To nie ma być `no-referrer`: przy nim natywny POST formularza (bez JS albo przed hydratacją)
+    // dostaje `Origin: null`, a sprawdzenie CSRF w react-router odrzuca go odpowiedzią `400`.
+    // `strict-origin` wysyła w `Referer` sam origin, bez ścieżki, i zostawia prawdziwy `Origin`.
+    expect(naglowki.get("referrer-policy")).toBe("strict-origin");
     expect(naglowki.get("cache-control")).toBe("no-store");
   });
 

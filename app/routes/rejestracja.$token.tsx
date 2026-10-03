@@ -25,6 +25,13 @@ import { RegistrationError, previewRegistration } from "~/lib/auth";
 /**
  * Token stoi w adresie — nie może wyciec nagłówkiem `Referer` ani zostać w pamięci pośredników.
  *
+ * `strict-origin`, nie `no-referrer`. W `Referer` wychodzi wtedy sam origin, nigdy ścieżka, więc
+ * token zostaje na stronie, a przeglądarka dalej wysyła prawdziwy `Origin` przy POST-cie na ten
+ * sam adres. Przy `no-referrer` natywny POST formularza (bez JS albo przed hydratacją) niesie
+ * `Origin: null`; sprawdzenie CSRF w react-router (`throwIfPotentialCSRFAttack`) traktuje je jak
+ * obcy origin i odrzuca akcję odpowiedzią `400`. Wysyłka z JS (`fetch` w trybie `cors`) przeszłaby
+ * w obu przypadkach, więc ten błąd nie ujawnia się w zwykłym użyciu.
+ *
  * Kopia nagłówków rodzica jest tu konieczna, nie ozdobna: trasa z własnym `headers` NIE dziedziczy
  * nagłówków `root.tsx`. Router składa je od nowa z tego, co zwróci ta funkcja, a z rodzica przenosi
  * wyłącznie `Set-Cookie` (`getDocumentHeaders` w react-router, także dla odpowiedzi `.data`).
@@ -33,7 +40,7 @@ import { RegistrationError, previewRegistration } from "~/lib/auth";
  */
 export function headers({ parentHeaders }: HeadersArgs): Headers {
   const naglowki = new Headers(parentHeaders);
-  naglowki.set("Referrer-Policy", "no-referrer");
+  naglowki.set("Referrer-Policy", "strict-origin");
   naglowki.set("Cache-Control", "no-store");
   return naglowki;
 }
