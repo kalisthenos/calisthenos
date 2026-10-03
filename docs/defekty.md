@@ -398,10 +398,26 @@ BE nie wysyła nowych linków). **Zalecenie: rozstrzygnąć przed otwarciem reje
 | Maskowanie segmentu tokenu w `logUnhandled` | Tania i po naszej stronie: kilka linii i przypadek w `logger.test.ts`. **Zamyka tylko jedno z dwóch miejsc** — log dostępowy `morgan` zostaje |
 | Zostawić | Token w logach platformy do czasu użycia albo wygaśnięcia; kto je czyta, może go wykorzystać |
 
+**Zakres — uzupełnienie 2026-10-03, z przeglądu całości gałęzi `feat/rejestracja-trenera`.** Token
+trafiał też do logu żądań **BE**, nie tylko FE: `requestSerializer` w
+`calisthenos-be/libs/shared/observability/src/lib/logger.module.ts` zapisuje `req.url` bez zmian
+(przycina go wyłącznie dla callbacku OAuth i tras plików), więc wołania, które serwer FE robi do BE
+— m.in. `GET /v1/registrations/<token>`, `POST /v1/registrations/<token>/complete` i
+`POST /v1/invites/<token>/accept` — zostawiały w logu API pełny token w ścieżce. W tej samej rundzie
+gałąź BE `chore/domkniecie-tras-rejestracji` dostaje maskowanie segmentu tokenu w tym logu (trasy
+rejestracji i zaproszeń). **Po scaleniu obu gałęzi BE przestaje być miejscem, w którym token leży
+w logach; zostaje strona FE** — `morgan("tiny")` w `react-router-serve`, jedyna kopia zapisywana przy
+KAŻDYM żądaniu, oraz `logUnhandled`, tylko przy `500`. Naprawa po stronie FE (pierwsza droga z tabeli,
+własny serwer startowy) jest więc dalej potrzebna, a zalecenie „rozstrzygnąć przed otwarciem
+rejestracji” nie traci mocy.
+
 **Czego dotyka.** Infrastruktura i obserwowalność: skrypt `start` w `package.json` (`startCommand`
 w `railway.toml` i `CMD` w `Dockerfile` wołają `npm run start`), `Dockerfile` (plik serwera poza
 `build/` wymaga `COPY`) oraz `app/lib/logger.ts` (`logUnhandled`); pośrednio uwierzytelnianie —
 chodzi o tokeny jednorazowych linków z maili. Zmiana startu i obrazu to decyzja Właściciela.
+**Po stronie BE** (osobne drzewo, ten sam token): `libs/shared/observability/src/lib/logger.module.ts`
+(`requestSerializer`) w `calisthenos-be` — maskowanie segmentu tokenu na gałęzi
+`chore/domkniecie-tras-rejestracji`; patrz akapit „Zakres” wyżej.
 
 ---
 
