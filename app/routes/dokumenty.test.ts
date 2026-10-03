@@ -1,9 +1,23 @@
 // @vitest-environment node
-import { describe, expect, it, vi } from "vitest";
+import { afterAll, describe, expect, it, vi } from "vitest";
 
 vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.test" }),
 }));
+
+// Strefa PROCESU testu ma różnić się od strefy aplikacji (Europe/Warsaw), i to PRZED załadowaniem
+// trasy: formatter daty powstaje przy ładowaniu modułu, a `Intl.DateTimeFormat` bez jawnej strefy
+// zapamiętuje strefę procesu z chwili budowy. Na maszynie, która sama stoi w Warszawie, test daty
+// zostawałby zielony także po usunięciu przypięcia strefy z trasy. `vi.hoisted` biegnie przed
+// importami. Że Node respektuje zmianę `process.env.TZ` w locie, nie zakładamy po cichu: pilnuje
+// tego przypadek „fixture rozróżnia strefy” niżej.
+vi.hoisted(() => {
+  vi.stubEnv("TZ", "UTC");
+});
+
+afterAll(() => {
+  vi.unstubAllEnvs();
+});
 
 import { createElement } from "react";
 import { renderToStaticMarkup } from "react-dom/server";
@@ -16,7 +30,7 @@ import {
 import { createApiClient } from "~/lib/api/client";
 import { type AuthUser, apiContext } from "~/lib/api/context";
 import { ApiError } from "~/lib/api/errors";
-import Dokument, { loader } from "./dokumenty.$klucz.$wersja";
+import Dokument, { loader, meta } from "./dokumenty.$klucz.$wersja";
 
 const TRENER: AuthUser = {
   id: "p-1",
@@ -60,7 +74,8 @@ const DOKUMENT = {
   title: "Regulamin",
   content: "Treść **dokumentu** w Markdownie.",
   // 22:30 UTC to już 1 października w Warszawie (CEST): data na stronie idzie za strefą aplikacji,
-  // nie za strefą serwera, więc UTC i Warszawa wskazują tu różne dni.
+  // nie za strefą serwera, więc UTC i Warszawa wskazują tu różne dni. Proces testu stoi w UTC
+  // (`TZ` na górze pliku), więc o wyniku rozstrzyga przypięcie strefy w trasie, nie położenie maszyny.
   effectiveFrom: "2026-09-30T22:30:00.000Z",
 };
 
@@ -224,6 +239,19 @@ describe("dokumenty/:klucz/:wersja — widok", () => {
     expect(html).toContain("<h2>1. Postanowienia</h2>");
     expect(html).toContain("<strong>dokumentu</strong>");
     expect(html).toContain("<li>pierwszy</li>");
+    // Treść stoi w elemencie ze stylami dokumentu (`dokument-tresc` w `app/styles/tokens.css`).
+    // Bez klasy Markdown wraca do zerowych marginesów nagłówków, a nic tego nie zgłasza: arkusz
+    // stylów nie ma testu, więc obecność klasy pilnuje tylko ta asercja.
+    expect(html).toMatch(/<div class="dokument-tresc">[\s\S]*<h2>1\. Postanowienia<\/h2>/);
+  });
+
+  it("fixture rozróżnia strefy: formatter bez przypiętej strefy pokazuje inny dzień niż strona", () => {
+    // Kanarek środowiska, nie trasy. Asercja o dacie wyżej ma sens tylko wtedy, gdy strefa procesu
+    // różni się od strefy aplikacji; gdyby zmiana `TZ` przestała działać (inna wersja Node, inny
+    // system) na maszynie w Warszawie, zapali się ten przypadek — zamiast cichej ślepoty testu daty.
+    const bezPrzypiecia = new Intl.DateTimeFormat("pl-PL", { dateStyle: "long" });
+
+    expect(bezPrzypiecia.format(new Date(DOKUMENT.effectiveFrom))).toBe("30 września 2026");
   });
 
   it("surowy HTML z treści nie staje się elementami, a odnośnik javascript: nie dostaje adresu", async () => {
@@ -249,5 +277,15 @@ describe("dokumenty/:klucz/:wersja — widok", () => {
     expect(html).toContain("&lt;script&gt;alert(1)&lt;/script&gt;");
     expect(html).not.toContain("javascript:");
     expect(html).toContain("zły odnośnik");
+  });
+});
+
+describe("dokumenty/:klucz/:wersja — meta", () => {
+  it("tytuł karty to tytuł dokumentu z nazwą marki", () => {
+    expect(meta({ loaderData: DOKUMENT } as never)).toEqual([{ title: "Regulamin — kalisthenos" }]);
+  });
+
+  it("bez dokumentu trasa tytułu nie dokłada", () => {
+    expect(meta({ loaderData: undefined } as never)).toEqual([]);
   });
 });

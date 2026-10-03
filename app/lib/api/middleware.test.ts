@@ -25,7 +25,10 @@ vi.mock("~/lib/env", () => ({
   }),
 }));
 
-import { invitesControllerPreview } from "@kalisthenos/api-client";
+import {
+  exerciseCategoriesControllerList,
+  invitesControllerPreview,
+} from "@kalisthenos/api-client";
 import { RouterContextProvider } from "react-router";
 import { apiContext } from "./context";
 import { ApiError } from "./errors";
@@ -360,7 +363,8 @@ describe("apiMiddleware — cykl życia sesji w jednym żądaniu", () => {
 // KAŻDY z trzech klientów budowanych w middleware'ze ma tu własny przypadek: anonimowy,
 // zalogowany (`GET /v1/me`) i wymiana tokenu. Czwarty przypadek to ponowienie po 401, które
 // idzie z klonu i nie przechodzi przez budowę nagłówków drugi raz; piąty — nagłówki `x-kth-*`
-// nadesłane przez przeglądarkę, które nie mogą dotrzeć do BE.
+// nadesłane przez przeglądarkę, które nie mogą dotrzeć do BE; szósty — zalogowany niesie naraz
+// `Authorization` i trzy nagłówki adresu (scalanie nagłówków w konfiguracji klienta).
 describe("apiMiddleware — adres klienta w nagłówkach do BE (ADR-0048)", () => {
   it("klient anonimowy (bez ciastka) niesie adres, przeglądarkę i sekret", async () => {
     const widziane: Record<string, NaglowkiAdresu> = {};
@@ -482,5 +486,34 @@ describe("apiMiddleware — adres klienta w nagłówkach do BE (ADR-0048)", () =
     );
 
     expect(widziane["/v1/me"]).toEqual(ADRES_KLIENTA);
+  });
+
+  it("zalogowany: każde wywołanie do BE niesie naraz Authorization i trzy nagłówki adresu", async () => {
+    // `Authorization` dokłada opcja `auth` klienta, trzy nagłówki adresu — jego `headers`; klient
+    // scala jedno z drugim przy każdym żądaniu. Dziś każdy z nich jest dowiedziony osobno (token
+    // — przy ponowieniu po 401 i w `client.test.ts`, adres — w przypadkach wyżej); ten przypadek
+    // pilnuje obu RAZEM, na wywołaniu samego middleware'u (`GET /v1/me`) i na wywołaniu trasy
+    // klientem z kontekstu. Wywołanie trasy idzie funkcją SDK Z deklaracją `security`: bez niej
+    // klient nie dokłada tokenu w ogóle (`invitesControllerPreview` jest publiczne).
+    const widziane: Record<string, NaglowkiAdresu & { authorization: string | null }> = {};
+    const s = serwer((url, req) => {
+      widziane[url] = { ...przekazane(req), authorization: req.headers.get("authorization") };
+      return json(200, url === "/v1/me" ? ME : []);
+    });
+    const context = new RouterContextProvider();
+
+    await apiMiddleware(
+      { request: zadanie(sesja(), "/trener", OD_PRZEGLADARKI), context },
+      async () => {
+        await exerciseCategoriesControllerList({ client: context.get(apiContext).api });
+        return new Response("ok");
+      },
+      { fetch: s.fetch, now: () => TERAZ },
+    );
+
+    expect(s.trafienia).toEqual(["/v1/me", "/v1/exercise-categories"]);
+    const oczekiwane = { ...ADRES_KLIENTA, authorization: "Bearer A1" };
+    expect(widziane["/v1/me"]).toEqual(oczekiwane);
+    expect(widziane["/v1/exercise-categories"]).toEqual(oczekiwane);
   });
 });

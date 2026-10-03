@@ -5,6 +5,7 @@ import {
   type LoaderFunctionArgs,
   redirect,
   useActionData,
+  useNavigation,
 } from "react-router";
 import { z } from "zod";
 import { optionalUser, sectionFor } from "~/lib/api/auth";
@@ -46,6 +47,13 @@ export async function action(args: ActionFunctionArgs) {
 
 export default function Rejestracja() {
   const wynik = useActionData<typeof action>();
+  const navigation = useNavigation();
+  // Oba przyciski wysyłki są zablokowane na czas nawigacji: podwójne kliknięcie „Wyślij ponownie”
+  // zjada dwa z trzech linków na godzinę (limit na adres kanoniczny). `!== "idle"`, nie samo
+  // "submitting": wynik akcji trafia na ekran jeszcze w fazie "loading" (rewalidacja loadera), więc
+  // „Wyślij ponownie” bywa już widoczne, gdy nawigacja trwa — kliknięcie w tym oknie wysłałoby to
+  // samo zgłoszenie drugi raz.
+  const busy = navigation.state !== "idle";
   const wyslano = wynik && "wyslano" in wynik ? wynik.wyslano : null;
   return (
     <main className="auth-shell">
@@ -67,7 +75,7 @@ export default function Rejestracja() {
             {/* To samo zgłoszenie jeszcze raz — ta sama akcja, więc te same limity i odmowy. */}
             <Form method="post">
               <input type="hidden" name="email" value={wyslano} />
-              <button type="submit" className="btn btn-lg">
+              <button type="submit" className="btn btn-lg" disabled={busy}>
                 Wyślij ponownie
               </button>
             </Form>
@@ -93,7 +101,7 @@ export default function Rejestracja() {
                   {wynik.odmowa === "email-taken" && <Link to="/login">Przejdź do logowania</Link>}
                 </p>
               )}
-              <button type="submit" className="btn btn-primary btn-lg">
+              <button type="submit" className="btn btn-primary btn-lg" disabled={busy}>
                 Wyślij link
               </button>
             </Form>

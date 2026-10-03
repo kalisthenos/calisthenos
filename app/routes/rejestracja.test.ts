@@ -5,12 +5,19 @@ vi.mock("~/lib/env", () => ({
   getEnv: () => ({ API_URL: "http://be.test" }),
 }));
 
-import { RouterContextProvider } from "react-router";
+import { createElement } from "react";
+import { renderToStaticMarkup } from "react-dom/server";
+import {
+  RouterContextProvider,
+  StaticRouterProvider,
+  createStaticHandler,
+  createStaticRouter,
+} from "react-router";
 import { createApiClient } from "~/lib/api/client";
 import { type AuthUser, apiContext } from "~/lib/api/context";
 import { ApiError } from "~/lib/api/errors";
 import { RegistrationError } from "~/lib/auth";
-import { action, loader } from "./rejestracja";
+import Rejestracja, { action, loader } from "./rejestracja";
 
 const TRENER: AuthUser = {
   id: "p-1",
@@ -203,5 +210,52 @@ describe("rejestracja — loader", () => {
 
   it("gość dostaje formularz — loader niczego nie oddaje i nie przekierowuje", () => {
     expect(loader(argumenty(null) as never)).toBeNull();
+  });
+});
+
+// Komponent bez `@testing-library/react` (tego drzewa nie ma): render po stronie serwera przez
+// statyczny router danych, jak w `rejestracja.token.test.ts`. Statyczny router stoi zawsze w stanie
+// "idle", więc te testy NIE dowodzą blokady przycisków na czas wysyłki — pilnują wyłącznie, że
+// w spoczynku są aktywne, czyli że `busy` nie jest odwrócone.
+async function wyrenderuj(context: RouterContextProvider, request?: Request): Promise<string> {
+  const handler = createStaticHandler([
+    { path: "rejestracja", Component: Rejestracja, loader, action },
+  ]);
+  const wynik = await handler.query(request ?? new Request("https://fe.test/rejestracja"), {
+    requestContext: context,
+  });
+  if (wynik instanceof Response)
+    throw new Error(`zamiast widoku przyszła odpowiedź ${wynik.status}`);
+  const router = createStaticRouter(handler.dataRoutes, wynik);
+  return renderToStaticMarkup(
+    createElement(StaticRouterProvider, { router, context: wynik, hydrate: false }),
+  );
+}
+
+/**
+ * Otwierający znacznik `<button>` o danej treści; błąd, gdy go nie ma — asercja o NIEobecności
+ * atrybutu przeszłaby pusta, gdyby przycisku nie było.
+ */
+function przycisk(html: string, tekst: string): string {
+  const znacznik = new RegExp(`(<button [^>]*>)${tekst}</button>`).exec(html)?.[1];
+  if (!znacznik) throw new Error(`na stronie nie ma przycisku „${tekst}”`);
+  return znacznik;
+}
+
+describe("rejestracja — widok", () => {
+  it("krok 1 w spoczynku: formularz z aktywnym „Wyślij link”", async () => {
+    const html = await wyrenderuj(kontekst());
+
+    expect(html).toContain("Załóż konto trenera");
+    expect(przycisk(html, "Wyślij link")).not.toMatch(/\bdisabled\b/);
+  });
+
+  it("po wysłaniu adresu: „Sprawdź skrzynkę” z aktywnym „Wyślij ponownie”", async () => {
+    const context = kontekst(() => new Response(null, { status: 202 }));
+
+    const html = await wyrenderuj(context, zgloszenie({ email: "anna@x.pl" }));
+
+    expect(html).toContain("Sprawdź skrzynkę");
+    expect(przycisk(html, "Wyślij ponownie")).not.toMatch(/\bdisabled\b/);
   });
 });

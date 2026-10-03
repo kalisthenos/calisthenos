@@ -1,3 +1,7 @@
+// @vitest-environment node
+//
+// Moduł pracuje na `Request`/`Headers` serwera (Node), nie przeglądarki — tak samo jak w
+// `middleware.test.ts`, gdzie powód opisano szerzej: domyślny `happy-dom` ma własny `Request`.
 import { describe, expect, it } from "vitest";
 import { naglowkiPrzekazania } from "./forwarding";
 

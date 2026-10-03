@@ -1,11 +1,13 @@
 import Markdown from "react-markdown";
-import { type LoaderFunctionArgs, useLoaderData } from "react-router";
+import { type LoaderFunctionArgs, type MetaFunction, useLoaderData } from "react-router";
 import { optionalUser } from "~/lib/api/auth";
 import { consentDocument } from "~/lib/consent-documents";
+import { APP_TIME_ZONE } from "~/lib/format";
 
-// Strefa jest stała i wpisana wprost: serwer i przeglądarka formatują wtedy tę samą datę tak samo,
-// więc strona nie rozjeżdża się przy hydratacji, a „obowiązuje od” nie zależy od strefy hosta.
-const DATA = new Intl.DateTimeFormat("pl-PL", { dateStyle: "long", timeZone: "Europe/Warsaw" });
+// Strefa aplikacji jest stała i podana jawnie (`APP_TIME_ZONE`, ta sama co w `consultations.ts`):
+// serwer i przeglądarka formatują wtedy tę samą datę tak samo, więc strona nie rozjeżdża się przy
+// hydratacji, a „obowiązuje od” nie zależy od strefy hosta.
+const DATA = new Intl.DateTimeFormat("pl-PL", { dateStyle: "long", timeZone: APP_TIME_ZONE });
 
 /**
  * Strona publiczna i dla każdego (spec tras §9.3): zalogowany jej nie omija, więc `user` nie jest
@@ -26,8 +28,17 @@ export async function loader(args: LoaderFunctionArgs) {
 }
 
 /**
+ * Tytuł karty to tytuł dokumentu z nazwą marki, tak jak w `rejestracja.$token.tsx`. Bez dokumentu
+ * (loader rzucił `404`) nie ma czego podpisać — trasa tytułu nie dokłada.
+ */
+export const meta: MetaFunction<typeof loader> = ({ loaderData }) =>
+  loaderData ? [{ title: `${loaderData.title} — kalisthenos` }] : [];
+
+/**
  * Treść dokumentu prawnego w wersji (spec tras §8) — do przeczytania przed akceptacją, zapisania
- * i wydruku. `react-markdown` buduje elementy Reacta i surowego HTML nie przepuszcza.
+ * i wydruku. `react-markdown` buduje elementy Reacta i surowego HTML nie przepuszcza. Klasa
+ * `dokument-tresc` (`app/styles/tokens.css`) daje treści minimalną typografię: katalog zgód
+ * dostarcza sam Markdown, bez własnych styli.
  */
 export default function Dokument() {
   const d = useLoaderData<typeof loader>();
@@ -38,7 +49,9 @@ export default function Dokument() {
           Wersja {d.versionNumber} · obowiązuje od {DATA.format(new Date(d.effectiveFrom))}
         </div>
         <h1 style={{ fontSize: 22, marginBottom: 18 }}>{d.title}</h1>
-        <Markdown>{d.content}</Markdown>
+        <div className="dokument-tresc">
+          <Markdown>{d.content}</Markdown>
+        </div>
       </article>
     </main>
   );

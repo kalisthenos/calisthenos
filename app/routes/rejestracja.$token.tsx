@@ -8,6 +8,7 @@ import {
   redirect,
   useActionData,
   useLoaderData,
+  useNavigation,
 } from "react-router";
 import { z } from "zod";
 import { optionalUser, sectionFor } from "~/lib/api/auth";
@@ -141,6 +142,12 @@ function Karta({ children }: { children: React.ReactNode }) {
 export default function RejestracjaToken() {
   const dane = useLoaderData<typeof loader>();
   const wynik = useActionData<typeof action>();
+  const navigation = useNavigation();
+  // „Załóż konto” jest zablokowane na czas nawigacji: drugie kliknięcie trafiłoby na token już
+  // zużyty — osoba ma konto, a zobaczyłaby „Link jest nieważny albo wygasł”. `!== "idle"`, nie samo
+  // "submitting": po udanym dokończeniu akcja odpowiada przekierowaniem i nawigacja przechodzi
+  // w "loading", a formularz stoi na ekranie, dopóki nie skończy się ładowanie `/`.
+  const busy = navigation.state !== "idle";
 
   if (dane.stan === "link-niewazny") {
     return (
@@ -257,11 +264,15 @@ export default function RejestracjaToken() {
             <span>
               Akceptuję: {z.title} (
               {/* `noreferrer`, nie samo `noopener` (reguła `noBlankTarget` w Biome): adres tej strony
-                  niesie token, a odnośnik do dokumentu nie ma go dostać w `Referer`. */}
+                  niesie token, a odnośnik do dokumentu nie ma go dostać w `Referer`. `aria-label`
+                  zaczyna się od widocznego tekstu (WCAG 2.5.3, „Label in Name”), wskazuje dokument
+                  i uprzedza o nowej karcie — bez niego lista odnośników w czytniku ekranu to samo
+                  „przeczytaj” przy każdej zgodzie. */}
               <a
                 href={`/dokumenty/${z.key}/${z.versionNumber}`}
                 target="_blank"
                 rel="noreferrer noopener"
+                aria-label={`przeczytaj: ${z.title} (otwiera się w nowej karcie)`}
               >
                 przeczytaj
               </a>
@@ -274,7 +285,12 @@ export default function RejestracjaToken() {
             {wynik.blad} {linkNieWazny && <Link to="/rejestracja">Wyślij nowy link</Link>}
           </p>
         )}
-        <button type="submit" className="btn btn-primary btn-lg" style={{ marginTop: 4 }}>
+        <button
+          type="submit"
+          className="btn btn-primary btn-lg"
+          style={{ marginTop: 4 }}
+          disabled={busy}
+        >
           Załóż konto
         </button>
       </Form>

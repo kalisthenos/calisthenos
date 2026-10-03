@@ -422,20 +422,38 @@ async function wyrenderuj(context: RouterContextProvider, request?: Request): Pr
   );
 }
 
+/** Surowe atrybuty każdego odnośnika o danej treści, w kolejności na stronie. */
+function atrybutyOdnosnikow(html: string, tekst: string): string[] {
+  return [...html.matchAll(new RegExp(`<a ([^>]*)>${tekst}</a>`, "g"))].map((o) => o[1] ?? "");
+}
+
+/** Wartość atrybutu z surowego tekstu atrybutów, bez względu na ich kolejność; brak → `undefined`. */
+function atrybut(atrybuty: string, nazwa: string): string | undefined {
+  return new RegExp(`(?:^|\\s)${nazwa}="([^"]*)"`).exec(atrybuty)?.[1];
+}
+
 /** `href` każdego odnośnika o danej treści, w kolejności na stronie. */
 function hrefyOdnosnikow(html: string, tekst: string): string[] {
-  const hrefy: string[] = [];
-  for (const odnosnik of html.matchAll(new RegExp(`<a ([^>]*)>${tekst}</a>`, "g"))) {
-    const href = odnosnik[1]?.match(/href="([^"]*)"/)?.[1];
-    if (href !== undefined) hrefy.push(href);
-  }
-  return hrefy;
+  return atrybutyOdnosnikow(html, tekst).flatMap((atrybuty) => {
+    const href = atrybut(atrybuty, "href");
+    return href === undefined ? [] : [href];
+  });
 }
 
 /** Znacznik `<input>` o danej nazwie pola; błąd, gdy go nie ma. */
 function pole(html: string, nazwa: string): string {
   const znacznik = new RegExp(`<input [^>]*name="${nazwa}"[^>]*>`).exec(html)?.[0];
   if (!znacznik) throw new Error(`na stronie nie ma pola „${nazwa}”`);
+  return znacznik;
+}
+
+/**
+ * Otwierający znacznik `<button>` o danej treści; błąd, gdy go nie ma — asercja o NIEobecności
+ * atrybutu przeszłaby pusta, gdyby przycisku nie było.
+ */
+function przycisk(html: string, tekst: string): string {
+  const znacznik = new RegExp(`(<button [^>]*>)${tekst}</button>`).exec(html)?.[1];
+  if (!znacznik) throw new Error(`na stronie nie ma przycisku „${tekst}”`);
   return znacznik;
 }
 
@@ -518,10 +536,29 @@ describe("rejestracja/:token — widoki stanów", () => {
       "/dokumenty/terms-of-service/1",
       "/dokumenty/trainer-dpa/1",
     ]);
-    // W nowej karcie i bez `Referer`: adres tej strony niesie token.
-    expect(html.match(/target="_blank" rel="noreferrer noopener"/g)).toHaveLength(2);
+    // W nowej karcie i bez `Referer`: adres tej strony niesie token. Każdy odnośnik osobno, bez
+    // zakładania kolejności atrybutów ani słów w `rel`. Długość rozstrzyga PRZED pętlą: pusta
+    // lista przeszłaby ją bez ani jednej asercji.
+    const odnosniki = atrybutyOdnosnikow(html, "przeczytaj");
+    expect(odnosniki).toHaveLength(2);
+    for (const atrybuty of odnosniki) {
+      expect(atrybut(atrybuty, "target")).toBe("_blank");
+      const rel = (atrybut(atrybuty, "rel") ?? "").split(/\s+/);
+      expect(rel).toContain("noreferrer");
+      expect(rel).toContain("noopener");
+    }
+    // Nazwa dostępna zaczyna się od widocznego tekstu (WCAG 2.5.3), wskazuje dokument i uprzedza
+    // o nowej karcie.
+    expect(odnosniki.map((atrybuty) => atrybut(atrybuty, "aria-label"))).toEqual([
+      "przeczytaj: Regulamin (otwiera się w nowej karcie)",
+      "przeczytaj: Umowa powierzenia przetwarzania danych (otwiera się w nowej karcie)",
+    ]);
 
     expect(html).toContain("Załóż konto");
+    // Stan spoczynku: przycisk aktywny — to pilnuje, że `busy` nie jest odwrócone. Samej blokady
+    // na czas wysyłki ten test NIE dowodzi: statyczny router zawsze stoi w stanie "idle", więc
+    // `busy` jest tu zawsze fałszem.
+    expect(przycisk(html, "Załóż konto")).not.toMatch(/\bdisabled\b/);
     expect(html).not.toContain('role="alert"');
   });
 
@@ -551,5 +588,33 @@ describe("rejestracja/:token — widoki stanów", () => {
     expect(html).toContain('role="alert"');
     expect(html).toContain("Link jest nieważny albo wygasł.");
     expect(hrefyOdnosnikow(html, "Wyślij nowy link")).toEqual(["/rejestracja"]);
+  });
+
+  it("odmowa „adres ma już konto” po akcji: widok końcowy rozstrzyga przeładowany loader", async () => {
+    // Obie odpowiedzi BE to `409 EMAIL_ALREADY_TAKEN`: dokończenie odrzucone, a podgląd — wołany
+    // jeszcze raz po akcji — potwierdza, że adres tymczasem dostał konto. Akcja oddaje wtedy ten
+    // sam komunikat jako dane („Ten adres ma już konto. Zaloguj się.”), ale bez odnośnika; to
+    // karta z logowaniem, którą rysuje loader, jest widokiem końcowym.
+    const zadania: string[] = [];
+    const context = kontekst((req) => {
+      zadania.push(`${req.method} ${new URL(req.url).pathname}`);
+      return bladBE(409, "EMAIL_ALREADY_TAKEN");
+    });
+
+    const html = await wyrenderuj(context, dokonczenie(POPRAWNE, ZAZNACZONE));
+
+    // Kolejność żądań dowodzi, że loader poszedł PO akcji. Statyczny router przeładowuje loadery
+    // zawsze, więc to nie jest dowód na `shouldRevalidate` (o tym decyduje klient w przeglądarce):
+    // zawężenie go do `consents-changed` zepsułoby ten widok po cichu, a żaden test jednostkowy
+    // tego nie zobaczy. Test pilnuje czegoś innego — że o widoku końcowym rozstrzyga loader.
+    expect(zadania).toEqual([
+      "POST /v1/registrations/tok-1/complete",
+      "GET /v1/registrations/tok-1",
+    ]);
+    expect(html).toMatch(/<h1[^>]*>Ten adres ma już konto<\/h1>/);
+    expect(hrefyOdnosnikow(html, "Zaloguj się")).toEqual(["/login"]);
+    // Karta, nie formularz z alertem: komunikat akcji nie ma tu miejsca na ekranie.
+    expect(html).not.toContain("<form");
+    expect(html).not.toContain('role="alert"');
   });
 });
