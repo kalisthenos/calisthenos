@@ -30,6 +30,7 @@ const BaseEnvSchema = z.object({
    * Poza produkcją opcjonalny — bez niego FE po prostu nie dokłada nagłówków. Pusty string
    * znaczy brak (ten sam powód co przy `API_PUBLIC_URL`: `loadEnv` oddaje pustą linię z `.env`
    * jako `""`), a niepusty krótszy niż 32 znaki jest błędem wszędzie, nie dopiero na produkcji.
+   * Na produkcji odrzucana jest też wartość z `.env.example` — patrz `PRZEDROSTEK_SEKRETU_Z_PRZYKLADU`.
    */
   CLIENT_FORWARDING_SECRET: z.preprocess(
     (v) => (v === "" ? undefined : v),
@@ -45,6 +46,17 @@ const BaseEnvSchema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
 });
 
+/**
+ * Przedrostek wartości `CLIENT_FORWARDING_SECRET` z `.env.example` (`zmien-mnie-sekret-…`).
+ *
+ * Przykład ma 44 znaki, więc `.min(32)` go przepuszcza: skopiowany na Railway bez zmiany przeszedłby
+ * walidację, a to wartość publiczna, wpisana w repozytorium — żaden sekret. Kto ją zna, podaje BE
+ * dowolny adres i przeglądarkę klienta (limity, dowód zgody), a nic tego nie zgłasza, bo FE i BE
+ * zgadzają się co do wartości. Dlatego na produkcji odrzucamy ją po przedrostku. Rozjazd z przykładem
+ * (inny przedrostek w pliku, ta sama stała tutaj) zapala `env.test.ts`, który czyta prawdziwy plik.
+ */
+const PRZEDROSTEK_SEKRETU_Z_PRZYKLADU = "zmien-mnie";
+
 export const EnvSchema = BaseEnvSchema.superRefine((env, ctx) => {
   // Brak sekretu na produkcji nie wywraca żadnej trasy — BE po cichu liczy cały ruch z webu
   // adresem serwera FE. Dlatego zatrzymuje start (`getEnv()` rzuca w `apiMiddleware`, więc
@@ -54,6 +66,19 @@ export const EnvSchema = BaseEnvSchema.superRefine((env, ctx) => {
       code: "custom",
       path: ["CLIENT_FORWARDING_SECRET"],
       message: "Na produkcji wymagany (ADR-0048 w BE).",
+    });
+  }
+  // Wartość z `.env.example` na produkcji to ten sam brak ochrony z miną ochrony. Poza produkcją
+  // przechodzi — lokalnie wystarcza skopiować plik.
+  if (
+    env.NODE_ENV === "production" &&
+    env.CLIENT_FORWARDING_SECRET?.startsWith(PRZEDROSTEK_SEKRETU_Z_PRZYKLADU)
+  ) {
+    ctx.addIssue({
+      code: "custom",
+      path: ["CLIENT_FORWARDING_SECRET"],
+      message:
+        "CLIENT_FORWARDING_SECRET: wartość przykładowa z .env.example (zmien-mnie…) — na produkcji ustaw losowy sekret (ADR-0048 w BE).",
     });
   }
 }).transform((env) => ({

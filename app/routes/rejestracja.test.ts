@@ -50,10 +50,10 @@ function kontekst(
 
 // Koperta błędu BE: `{ error: { code, message } }`. `message` przychodzi z BE, ale trasa go
 // NIE pokazuje — testy niżej sprawdzają, że użytkownik widzi tekst WŁASNY frontu.
-function bladBE(status: number, code: string): Response {
+function bladBE(status: number, code: string, naglowki: Record<string, string> = {}): Response {
   return new Response(
     JSON.stringify({ error: { code, message: "Komunikat z BE, którego FE nie pokazuje." } }),
-    { status, headers: { "content-type": "application/json" } },
+    { status, headers: { "content-type": "application/json", ...naglowki } },
   );
 }
 
@@ -116,9 +116,11 @@ describe("rejestracja — krok 1, zgłoszenie adresu", () => {
       context,
     } as never);
 
+    // Odmowa po poprawnym adresie niesie ten adres z powrotem — formularz pokaże go w polu.
     expect(wynik).toEqual({
       blad: "Ten adres ma już konto. Zaloguj się.",
       odmowa: "email-taken",
+      email: "anna@x.pl",
     });
   });
 
@@ -136,7 +138,72 @@ describe("rejestracja — krok 1, zgłoszenie adresu", () => {
     expect(wynik).toEqual({
       blad: "Rejestracja kont trenerów jest chwilowo zamknięta.",
       odmowa: "registration-closed",
+      email: "anna@x.pl",
     });
+  });
+
+  // „Wyślij ponownie” to ta sama akcja z ukrytym polem `email`, więc odmowa przy ponownym wysłaniu
+  // wraca tą samą ścieżką co każda inna. Wynik akcji zastępuje poprzedni: widok „Sprawdź skrzynkę”
+  // znika razem z adresem, a formularz, który go zastępuje, miałby puste pole pod komunikatem
+  // o „tym adresie”. Dlatego odmowa po poprawnym adresie niesie ten adres — pole pokazuje go
+  // z powrotem (test widoku niżej).
+  const ODMOWY_PRZY_PONOWNYM_WYSLANIU: [
+    string,
+    () => Response,
+    { blad: string; odmowa: string },
+  ][] = [
+    [
+      "429 TOO_MANY_LINK_REQUESTS",
+      () => bladBE(429, "TOO_MANY_LINK_REQUESTS"),
+      {
+        blad: "Wysłaliśmy już kilka wiadomości na ten adres — sprawdź skrzynkę (także folder spam) albo spróbuj za godzinę.",
+        odmowa: "too-many-links",
+      },
+    ],
+    [
+      "429 RATE_LIMITED z Retry-After: 120",
+      () => bladBE(429, "RATE_LIMITED", { "retry-after": "120" }),
+      { blad: "Za dużo prób. Spróbuj ponownie za 2 min.", odmowa: "rate-limited" },
+    ],
+    [
+      "409 REGISTRATION_CLOSED",
+      () => bladBE(409, "REGISTRATION_CLOSED"),
+      { blad: "Rejestracja kont trenerów jest chwilowo zamknięta.", odmowa: "registration-closed" },
+    ],
+  ];
+
+  it.each(ODMOWY_PRZY_PONOWNYM_WYSLANIU)(
+    "%s przy ponownym wysłaniu: odmowa niesie adres z formularza",
+    async (_opis, odpowiedz, oczekiwane) => {
+      const context = kontekst(odpowiedz);
+
+      const wynik = await action({
+        request: zgloszenie({ email: "anna@x.pl" }),
+        params: {},
+        context,
+      } as never);
+
+      expect(wynik).toEqual({ ...oczekiwane, email: "anna@x.pl" });
+    },
+  );
+
+  it("adres w odmowie to ten przycięty, który pojechał do BE — nie surowe pole formularza", async () => {
+    // Zwraca się wartość po Zod, tak jak przy sukcesie. Surowe pole mogłoby mieć odstępy (albo nie
+    // być tekstem w ogóle), a wynik akcji trafia z powrotem do atrybutu na stronie.
+    let cialo: unknown;
+    const context = kontekst(async (req) => {
+      cialo = await req.json();
+      return bladBE(429, "TOO_MANY_LINK_REQUESTS");
+    });
+
+    const wynik = await action({
+      request: zgloszenie({ email: "  anna@x.pl " }),
+      params: {},
+      context,
+    } as never);
+
+    expect(cialo).toEqual({ email: "anna@x.pl" });
+    expect(wynik).toMatchObject({ odmowa: "too-many-links", email: "anna@x.pl" });
   });
 
   // Wiersze: to, co użytkownik wpisał, albo to, co przeszło przez formularz mimo `required`
@@ -242,12 +309,36 @@ function przycisk(html: string, tekst: string): string {
   return znacznik;
 }
 
+/** Znacznik `<input>` pola adresu z formularza kroku 1; błąd, gdy go nie ma. */
+function poleAdresu(html: string): string {
+  const znacznik = /<input [^>]*id="reg-email"[^>]*>/.exec(html)?.[0];
+  if (!znacznik) throw new Error("na stronie nie ma pola adresu („reg-email”)");
+  return znacznik;
+}
+
 describe("rejestracja — widok", () => {
-  it("krok 1 w spoczynku: formularz z aktywnym „Wyślij link”", async () => {
+  it("krok 1 w spoczynku: formularz z aktywnym „Wyślij link” i pustym polem adresu", async () => {
     const html = await wyrenderuj(kontekst());
 
     expect(html).toContain("Załóż konto trenera");
     expect(przycisk(html, "Wyślij link")).not.toMatch(/\bdisabled\b/);
+    // Świeży formularz nie ma wartości w polu. To zarazem kontrola dla testu niżej: pole jest
+    // znajdowane, a brak `value` widać na nim jako brak — nie jako pudło wyszukiwania.
+    expect(poleAdresu(html)).not.toContain("value=");
+  });
+
+  it("odmowa przy „Wyślij ponownie”: formularz z adresem w polu, a nie pusty ani „Sprawdź skrzynkę”", async () => {
+    // Odmowa zastępuje widok „Sprawdź skrzynkę” formularzem, a komunikat mówi o „tym adresie”.
+    // Bez adresu w polu wskazywałby adres, którego nie ma już na ekranie.
+    const context = kontekst(() => bladBE(429, "TOO_MANY_LINK_REQUESTS"));
+
+    const html = await wyrenderuj(context, zgloszenie({ email: "anna@x.pl" }));
+
+    expect(html).not.toContain("Sprawdź skrzynkę");
+    expect(html).toContain("Załóż konto trenera");
+    expect(html).toContain('role="alert"');
+    expect(html).toContain("Wysłaliśmy już kilka wiadomości na ten adres");
+    expect(poleAdresu(html)).toContain('value="anna@x.pl"');
   });
 
   it("po wysłaniu adresu: „Sprawdź skrzynkę” z aktywnym „Wyślij ponownie”", async () => {

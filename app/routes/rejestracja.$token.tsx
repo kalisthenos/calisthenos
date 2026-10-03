@@ -181,9 +181,16 @@ export default function RejestracjaToken() {
 
   if (dane.stan === "rejestracja-zamknieta") {
     // Bez formularza i bez „Wyślij nowy link”: nowy link nie pomoże, dopóki rejestracja jest zamknięta.
+    // Zostaje jedna droga dalej — logowanie (osoba mogła tymczasem założyć konto). Każdy inny stan
+    // tej trasy ma odnośnik; karta bez żadnego byłaby ślepym zaułkiem.
     return (
       <Karta>
-        <h1 style={{ fontSize: 22 }}>Rejestracja kont trenerów jest chwilowo zamknięta.</h1>
+        <h1 style={{ fontSize: 22, marginBottom: 18 }}>
+          Rejestracja kont trenerów jest chwilowo zamknięta.
+        </h1>
+        <Link to="/login" className="btn btn-primary btn-lg">
+          Przejdź do logowania
+        </Link>
       </Karta>
     );
   }

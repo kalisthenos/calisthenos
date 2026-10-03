@@ -40,7 +40,15 @@ export async function action(args: ActionFunctionArgs) {
   } catch (e) {
     // Wąsko: `RegistrationError` to komunikat w formularzu, wszystko inne (awaria BE) leci do
     // granicy błędu. Pomylenie tych dwóch kazałoby poprawiać adres w odpowiedzi na cudzą usterkę.
-    if (e instanceof RegistrationError) return { blad: e.userMessage, odmowa: e.refusal };
+    //
+    // Odmowa oddaje też adres, który przeszedł Zod. Wynik akcji zastępuje poprzedni, więc odmowa
+    // przy „Wyślij ponownie” zabiera widok „Sprawdź skrzynkę” razem z adresem, a formularz, który
+    // go zastępuje, byłby pusty — pod komunikatem o „tym adresie”, którego już nie widać. Zły
+    // kształt adresu (wyżej) go nie oddaje: pole zostaje na ekranie takie, jakie człowiek wypełnił,
+    // i nie ma czego przywracać.
+    if (e instanceof RegistrationError) {
+      return { blad: e.userMessage, odmowa: e.refusal, email: parsed.data.email };
+    }
     throw e;
   }
 }
@@ -55,6 +63,9 @@ export default function Rejestracja() {
   // samo zgłoszenie drugi raz.
   const busy = navigation.state !== "idle";
   const wyslano = wynik && "wyslano" in wynik ? wynik.wyslano : null;
+  // Adres z odmowy wraca do pola: po „Wyślij ponownie” formularz powstaje od nowa (widok
+  // „Sprawdź skrzynkę” znika), więc bez tego stałby pusty (patrz `action`).
+  const adresZOdmowy = wynik && "email" in wynik ? wynik.email : undefined;
   return (
     <main className="auth-shell">
       <div className="auth-card">
@@ -92,6 +103,7 @@ export default function Rejestracja() {
                   type="email"
                   required
                   autoComplete="email"
+                  defaultValue={adresZOdmowy}
                   className="input"
                 />
               </div>

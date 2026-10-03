@@ -99,7 +99,7 @@ Required env vars on Railway:
 | `NODE_ENV` | `production` |
 | `API_URL` | backend URL (Railway private network, if available) |
 | `API_PUBLIC_URL` | public backend URL, for `<img>`/`<video>` `src`; defaults to `API_URL` |
-| `CLIENT_FORWARDING_SECRET` | random secret (32+ chars), the **same** value in the FE, API and worker services (ADR-0048 in `calisthenos-be`). Without it the production deploy never goes healthy — `getEnv()` throws in the middleware, `/healthz` included |
+| `CLIENT_FORWARDING_SECRET` | random secret (32+ chars), the **same** value in the FE, API and worker services (ADR-0048 in `calisthenos-be`). Without it — or with the `zmien-mnie…` example value from `.env.example` — the production deploy never goes healthy: `getEnv()` throws in the middleware, `/healthz` included |
 | `GITHUB_TOKEN` | build-time only — `read:packages` (private `@kalisthenos/api-client`) |
 
 > **Healthcheck:** `healthcheckPath` points at `/healthz` — a resource route

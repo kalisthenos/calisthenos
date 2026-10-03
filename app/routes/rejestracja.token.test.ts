@@ -482,12 +482,15 @@ describe("rejestracja/:token — widoki stanów", () => {
     expect(html).not.toContain("<form");
   });
 
-  it("rejestracja zamknięta: sam komunikat — bez formularza i bez „Wyślij nowy link”", async () => {
+  it("rejestracja zamknięta: komunikat i wyjście na logowanie — bez formularza i bez „Wyślij nowy link”", async () => {
     const html = await wyrenderuj(kontekst(() => bladBE(409, "REGISTRATION_CLOSED")));
 
     expect(html).toContain("Rejestracja kont trenerów jest chwilowo zamknięta.");
     expect(html).not.toContain("<form");
     expect(hrefyOdnosnikow(html, "Wyślij nowy link")).toEqual([]);
+    // Każdy inny stan tej trasy ma odnośnik dalej; karta bez żadnego była ślepym zaułkiem.
+    // Droga jest jedna — logowanie: nowy link nie pomoże, dopóki rejestracja jest zamknięta.
+    expect(hrefyOdnosnikow(html, "Przejdź do logowania")).toEqual(["/login"]);
   });
 
   it("limit: komunikat z minutami i „Spróbuj ponownie” na TEJ SAMEJ stronie, z tokenem", async () => {
