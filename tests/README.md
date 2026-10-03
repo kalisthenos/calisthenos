@@ -12,7 +12,7 @@ czego integrować — dane bierze z kontraktu BE. Ich rolę przejęły dwie rzec
   zakres tenanta, bramka formularza startowego (spec integracji §10).
 
 Katalog `tests/e2e/` (wskazywany przez `playwright.config.ts`, uruchamiany
-przez `npm run e2e`) niesie dziś dwa pliki. `sesja-poza-planem.spec.ts` ma
+przez `npm run e2e`) niesie dziś trzy pliki. `sesja-poza-planem.spec.ts` ma
 dwa scenariusze: wymianę ćwiczenia W MIEJSCU z dodatkiem spoza planu oraz
 PRZESTAWIENIE ćwiczeń (2026-09-09) — oba dowodzone na TREŚCI zapisanego logu,
 nie na samej obecności elementu na stronie. Drugi scenariusz powtarza kroki
@@ -65,6 +65,30 @@ klientowi, wzorem `integracje.google.test.tsx`, dziś istnieje:
 `integracje.notatki-ai.test.tsx` w tym samym katalogu co trasa — dopisany
 przy przeglądzie tej gałęzi (W2), skoro dokładnie to zgłosił jako rekomendację
 raport Zadania 17.
+
+`rejestracja.spec.ts` (rejestracja trenera, krok 1 — 2026-10-03) jest jedynym plikiem BEZ
+konta z seedera: dowodzi ścieżki osoby, która konta jeszcze nie ma, więc konwencja „Konto” go
+nie dotyczy. Trzy scenariusze: (1) odnośnik z `/login` na `/rejestracja`, wysłanie unikalnego
+adresu → „Sprawdź skrzynkę” z tym adresem, potem „Wyślij ponownie” — dowodzone na ukrytym polu
+`email`, jedynym powiązaniu widoku sukcesu z akcją; (2) `/rejestracja/nieistniejacy-token` →
+„Link jest nieważny albo wygasł”, droga po nowy link i nagłówki strony z tokenem
+(`Referrer-Policy: strict-origin`, `Cache-Control: no-store`, CSP odziedziczone z roota);
+(3) `/dokumenty/nie-ma/1` → `404`. Krok 2 (link z maila, zgody, założenie konta) leży poza
+plikiem — pokrywa go e2e BE i test trasy przeciw podstawionemu klientowi. Warunki, od których
+zależy zieleń (pełny opis — w docblocku pliku):
+
+- **BE z `REGISTRATION_OPEN=true`** (scenariusze 1 i 2) — bez zmiennej rejestracja jest
+  zamknięta i oba widzą „Rejestracja kont trenerów jest chwilowo zamknięta.”. Scenariusz 3 jej
+  nie potrzebuje.
+- **Adres bez `+tag`** (`e2e-<znacznik>@kalisthenos.test`) — limit zgłoszeń (3 na godzinę) liczy
+  skrzynkę kanoniczną, więc `e2e+1@…` i `e2e+2@…` to jedna skrzynka.
+- **Budżet limitu po łączu** — `POST /v1/registrations` ma 10 żądań na godzinę, a plik zużywa
+  cztery na przebieg (dwa na projekt): przy domyślnym limicie to dwa pełne przebiegi na godzinę.
+- **BE bez `LETTERMINT_API_TOKEN`** — poczty test nie czyta, a z tokenem poszłyby prawdziwe maile.
+
+Uruchomienie: `npm run e2e -- tests/e2e/rejestracja.spec.ts` (oba projekty) albo z dopiskiem
+`--project=desktop` (połowa budżetu). Plik nie był jeszcze uruchomiony — pisany na punkt
+kontrolny C planu tras rejestracji.
 
 ---
 Konwencja i zasady aktualizacji dokumentacji: [`../CLAUDE.md`](../CLAUDE.md).
