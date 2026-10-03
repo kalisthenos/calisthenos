@@ -35,16 +35,24 @@ import { expect, test } from "@playwright/test";
  * czerwieni scenariusz 1 już przy PIERWSZYM wysłaniu (alert „Za dużo prób…” pod polem) — to nie
  * usterka FE.
  *
+ * **Uruchomienie** (z `calisthenos-fe`, przy działającym BE):
+ * `npm run e2e -- tests/e2e/rejestracja.spec.ts`, opcjonalnie z `--project=desktop`.
+ * **Pozostałość:** każdy przebieg projektu zostawia w BE niezamknięte zgłoszenia rejestracji
+ * (dwa na projekt) — wygasają po 24 godzinach, sprzątania nie trzeba.
+ *
  * **`page.goto` na token i dokument** — wyjątek dozwolony w `tests/README.md`: adres linku z maila
  * nie ma wejścia z żadnej strony aplikacji, a oba segmenty są znane z góry.
  *
- * **Dlaczego „Wyślij ponownie” podmienia adres w ukrytym polu.** Ukryte pole `email` jest jedynym
- * powiązaniem widoku sukcesu z akcją (przegląd Zadania 13), a widok po ponownym wysłaniu jest
- * IDENTYCZNY z widokiem przed nim (ten sam nagłówek, ten sam akapit) — stary widok stoi, dopóki
- * odpowiedź go nie zmieni. „Znów ten nagłówek” przeszłoby więc także bez pola, i to PRZED
- * odpowiedzią. Dlatego wartość pola zamieniamy na INNY poprawny adres: tylko odpowiedź akcji na
- * ten adres pokaże go w akapicie, więc asercja czeka na prawdziwy wynik. Ciało wysłanego żądania
- * jest drugim dowodem — jedynym w gałęzi, w której BE odmawia limitem i niczego nie odbija.
+ * **„Wyślij ponownie”: dowodem jest ciało żądania.** Ukryte pole `email` jest jedynym powiązaniem
+ * widoku sukcesu z akcją (przegląd Zadania 13) — gdy straci `name` albo `value`, akcja dostaje
+ * pusty adres. Krok czeka na aktywny przycisk (przy blokadzie `disabled` na czas wysyłki to realny
+ * warunek), klika go razem z oczekiwaniem na POST akcji i sprawdza, że ciało niesie TEN SAM adres
+ * co pierwsze zgłoszenie. **Czego krok nie dowodzi:** że ponowne wysłanie coś zmieniło na ekranie.
+ * Widok po nim jest IDENTYCZNY z widokiem przed nim (ten sam nagłówek, ten sam akapit), a router
+ * wpisuje wynik akcji do stanu jeszcze w fazie ładowania — asercja na widoku po kliknięciu bywa
+ * więc spełniona przez STARY widok i łapie wyłącznie odmowę, która zdążyła się narysować. Wartości
+ * pola NIE podmieniamy, żeby widok zmienił się naprawdę: pole jest kontrolowane przez Reacta,
+ * a każde ponowne wyrenderowanie (choćby powrót nawigacji do `idle`) przywraca wartość z propsów.
  *
  * **Czego plik nie dowodzi:** kroku 2 (wyżej); strony ISTNIEJĄCEGO dokumentu (katalog zgód ładuje
  * operator, seeder go nie zakłada, więc test nie ma czego otworzyć); tego, że 404 w scenariuszu 3
@@ -55,12 +63,8 @@ import { expect, test } from "@playwright/test";
 test("krok 1 rejestracji: z logowania do „Sprawdź skrzynkę” i „Wyślij ponownie”", async ({
   page,
 }) => {
-  // W teście, nie na poziomie modułu: każdy projekt i każdy przebieg ma dostać własne skrzynki.
-  // Drugi adres to osobna skrzynka kanoniczna (`-b` nie jest obcinane), więc dwa zgłoszenia nie
-  // dzielą limitu 3 na godzinę.
-  const stamp = Date.now();
-  const address = `e2e-${stamp}@kalisthenos.test`;
-  const otherAddress = `e2e-${stamp}-b@kalisthenos.test`;
+  // W teście, nie na poziomie modułu: każdy projekt i każdy przebieg ma dostać własną skrzynkę.
+  const address = `e2e-${Date.now()}@kalisthenos.test`;
 
   await test.step("odnośnik z logowania prowadzi na /rejestracja", async () => {
     await page.goto("/login");
@@ -82,12 +86,12 @@ test("krok 1 rejestracji: z logowania do „Sprawdź skrzynkę” i „Wyślij p
     await expect(page.getByText(`Wysłaliśmy link na ${address}.`)).toBeVisible();
   });
 
-  await test.step("„Wyślij ponownie” wysyła to, co stoi w ukrytym polu", async () => {
-    // Pole nie ma w widoku żadnej innej drogi do akcji, więc to ono decyduje, na jaki adres
-    // idzie zgłoszenie. Wartość ustawia się na elemencie (`fill` odmawia pola `hidden`).
-    await page.locator('input[type="hidden"][name="email"]').evaluate((input, value) => {
-      (input as HTMLInputElement).value = value;
-    }, otherAddress);
+  await test.step("„Wyślij ponownie” wysyła ten sam adres do akcji", async () => {
+    // Widok sukcesu pojawia się, gdy nawigacja jeszcze ładuje (router wpisuje wynik akcji do stanu
+    // przed końcem rewalidacji). Przycisk ma być aktywny, zanim go klikniemy — przy blokadzie
+    // `disabled` na czas wysyłki to realny warunek, nie formalność.
+    const resendButton = page.getByRole("button", { name: "Wyślij ponownie" });
+    await expect(resendButton).toBeEnabled();
 
     const [resend] = await Promise.all([
       page.waitForResponse(
@@ -95,25 +99,28 @@ test("krok 1 rejestracji: z logowania do „Sprawdź skrzynkę” i „Wyślij p
           res.request().method() === "POST" &&
           new URL(res.url()).pathname.startsWith("/rejestracja"),
       ),
-      page.getByRole("button", { name: "Wyślij ponownie" }).click(),
+      resendButton.click(),
     ]);
 
-    // Dowód 1 — ciało żądania: adres z ukrytego pola doszedł do akcji (także gdy BE odmówi).
+    // DOWÓD: ukryte pole `email` (jedyne powiązanie widoku sukcesu z akcją) doszło do akcji z tym
+    // samym adresem. Zapala się, gdy pole straci `name` (brak klucza) albo `value` (pusty adres).
     const sent = new URLSearchParams(resend.request().postData() ?? "");
     expect(
       sent.get("email"),
-      "„Wyślij ponownie” nie wysłało adresu z ukrytego pola email w widoku „Sprawdź skrzynkę”",
-    ).toBe(otherAddress);
+      "„Wyślij ponownie” nie wysłało adresu — ukryte pole email w widoku „Sprawdź skrzynkę” " +
+        "straciło name albo value",
+    ).toBe(address);
 
-    // Dowód 2 — wynik widoczny: akapit z NOWYM adresem (więc nagłówek „Sprawdź skrzynkę” też)
-    // albo odmowa limitu (limit zgłoszeń na skrzynkę albo po łączu). Stary widok niesie stary
-    // adres, więc żadna z dwóch możliwości nie jest spełniona, dopóki odpowiedź nie wyląduje;
-    // „Podaj poprawny adres e-mail.” — skutek zgubionego pola — nie spełnia żadnej.
-    const echoed = page.getByText(`Wysłaliśmy link na ${otherAddress}.`);
+    // Stan końcowy — NIE dowód: ten sam widok z tym samym adresem (akapit istnieje tylko w widoku
+    // „Sprawdź skrzynkę”) albo odmowa limitu (po łączu albo na skrzynkę). Widok jest taki sam jak
+    // przed kliknięciem, więc stary może spełnić asercję, zanim odpowiedź zostanie narysowana;
+    // łapie tylko odmowę, która zdążyła się pokazać (np. „Podaj poprawny adres e-mail.” nie
+    // spełnia żadnej z możliwości).
+    const sameView = page.getByText(`Wysłaliśmy link na ${address}.`);
     const limitAlert = page
       .getByRole("alert")
       .filter({ hasText: /Wysłaliśmy już kilka wiadomości|Za dużo prób/ });
-    await expect(echoed.or(limitAlert)).toBeVisible();
+    await expect(sameView.or(limitAlert)).toBeVisible();
   });
 });
 

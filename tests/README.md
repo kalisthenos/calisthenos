@@ -69,13 +69,15 @@ raport Zadania 17.
 `rejestracja.spec.ts` (rejestracja trenera, krok 1 — 2026-10-03) jest jedynym plikiem BEZ
 konta z seedera: dowodzi ścieżki osoby, która konta jeszcze nie ma, więc konwencja „Konto” go
 nie dotyczy. Trzy scenariusze: (1) odnośnik z `/login` na `/rejestracja`, wysłanie unikalnego
-adresu → „Sprawdź skrzynkę” z tym adresem, potem „Wyślij ponownie” — dowodzone na ukrytym polu
-`email`, jedynym powiązaniu widoku sukcesu z akcją; (2) `/rejestracja/nieistniejacy-token` →
-„Link jest nieważny albo wygasł”, droga po nowy link i nagłówki strony z tokenem
-(`Referrer-Policy: strict-origin`, `Cache-Control: no-store`, CSP odziedziczone z roota);
-(3) `/dokumenty/nie-ma/1` → `404`. Krok 2 (link z maila, zgody, założenie konta) leży poza
-plikiem — pokrywa go e2e BE i test trasy przeciw podstawionemu klientowi. Warunki, od których
-zależy zieleń (pełny opis — w docblocku pliku):
+adresu → „Sprawdź skrzynkę” z tym adresem, potem „Wyślij ponownie” — dowodem jest ciało
+żądania: ukryte pole `email`, jedyne powiązanie widoku sukcesu z akcją, niesie ten sam adres.
+Widoku po ponownym wysłaniu nie da się odróżnić od widoku sprzed kliknięcia, a wartości pola nie
+podmienia się w teście — React je kontroluje i przywraca przy każdym renderze; (2)
+`/rejestracja/nieistniejacy-token` → „Link jest nieważny albo wygasł”, droga po nowy link
+i nagłówki strony z tokenem (`Referrer-Policy: strict-origin`, `Cache-Control: no-store`, CSP
+odziedziczone z roota); (3) `/dokumenty/nie-ma/1` → `404`. Krok 2 (link z maila, zgody,
+założenie konta) leży poza plikiem — pokrywa go e2e BE i test trasy przeciw podstawionemu
+klientowi. Warunki, od których zależy zieleń (pełny opis — w docblocku pliku):
 
 - **BE z `REGISTRATION_OPEN=true`** (scenariusze 1 i 2) — bez zmiennej rejestracja jest
   zamknięta i oba widzą „Rejestracja kont trenerów jest chwilowo zamknięta.”. Scenariusz 3 jej
