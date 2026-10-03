@@ -38,26 +38,32 @@ import { expect, test } from "@playwright/test";
  * **Uruchomienie** (z `calisthenos-fe`, przy działającym BE):
  * `npm run e2e -- tests/e2e/rejestracja.spec.ts`, opcjonalnie z `--project=desktop`.
  * **Pozostałość:** każdy przebieg projektu zostawia w BE niezamknięte zgłoszenia rejestracji
- * (dwa na projekt) — wygasają po 24 godzinach, sprzątania nie trzeba.
+ * (dwa na projekt). Po 24 godzinach wygasa TOKEN linku, nie wiersz: zgłoszenia zostają w tabeli
+ * z pustym `closed_at`. Sprzątanie nie jest potrzebne — nie wpływają na kolejne przebiegi, bo
+ * adres każdego jest inny, a limit zgłoszeń liczy tylko tę samą skrzynkę.
  *
  * **`page.goto` na token i dokument** — wyjątek dozwolony w `tests/README.md`: adres linku z maila
  * nie ma wejścia z żadnej strony aplikacji, a oba segmenty są znane z góry.
  *
  * **„Wyślij ponownie”: dowodem jest ciało żądania.** Ukryte pole `email` jest jedynym powiązaniem
  * widoku sukcesu z akcją (przegląd Zadania 13) — gdy straci `name` albo `value`, akcja dostaje
- * pusty adres. Krok czeka na aktywny przycisk (przy blokadzie `disabled` na czas wysyłki to realny
- * warunek), klika go razem z oczekiwaniem na POST akcji i sprawdza, że ciało niesie TEN SAM adres
- * co pierwsze zgłoszenie. **Czego krok nie dowodzi:** że ponowne wysłanie coś zmieniło na ekranie.
- * Widok po nim jest IDENTYCZNY z widokiem przed nim (ten sam nagłówek, ten sam akapit), a router
- * wpisuje wynik akcji do stanu jeszcze w fazie ładowania — asercja na widoku po kliknięciu bywa
- * więc spełniona przez STARY widok i łapie wyłącznie odmowę, która zdążyła się narysować. Wartości
- * pola NIE podmieniamy, żeby widok zmienił się naprawdę: pole jest kontrolowane przez Reacta,
- * a każde ponowne wyrenderowanie (choćby powrót nawigacji do `idle`) przywraca wartość z propsów.
+ * pusty adres. Przycisk jest zablokowany (`disabled`) na czas nawigacji — robi to `busy` w
+ * `app/routes/rejestracja.tsx` — więc krok czeka, aż będzie aktywny, zanim go kliknie: to realny
+ * warunek, nie formalność. Klika go razem z oczekiwaniem na POST akcji i sprawdza, że ciało niesie
+ * TEN SAM adres co pierwsze zgłoszenie. **Czego krok nie dowodzi:** że ponowne wysłanie coś zmieniło
+ * na ekranie. Widok po nim jest IDENTYCZNY z widokiem przed nim (ten sam nagłówek, ten sam akapit),
+ * więc w trakcie wysyłki stary widok nie różni się od nowego, a asercja na widoku po kliknięciu
+ * bywa spełniona przez STARY widok i łapie wyłącznie odmowę, która zdążyła się narysować. Router
+ * wpisuje wynik akcji do stanu jeszcze w fazie ładowania — to jest powód czekania na aktywny
+ * przycisk (komentarz kroku niżej), nie powód, dla którego stary widok spełnia asercję. Wartości
+ * pola nie podmieniamy (robiło to wcześniejsze podejście, żeby widok się zmienił): pole jest
+ * kontrolowane przez Reacta i wraca do wartości z propsów przy każdym renderze, choćby przy
+ * powrocie nawigacji do `idle`.
  *
  * **Czego plik nie dowodzi:** kroku 2 (wyżej); strony ISTNIEJĄCEGO dokumentu (katalog zgód ładuje
  * operator, seeder go nie zakłada, więc test nie ma czego otworzyć); tego, że 404 w scenariuszu 3
- * pochodzi z loadera, a nie z braku trasy — rejestrację trasy w `app/routes.ts` żaden test nie
- * pinuje, a odpowiedź jest ta sama.
+ * pochodzi z loadera, a nie z braku trasy — odpowiedź jest ta sama. Wpis trasy w `app/routes.ts`
+ * pinuje osobno test jednostkowy (`app/routes/rejestracja.wpisy.test.ts`).
  */
 
 test("krok 1 rejestracji: z logowania do „Sprawdź skrzynkę” i „Wyślij ponownie”", async ({
@@ -88,8 +94,9 @@ test("krok 1 rejestracji: z logowania do „Sprawdź skrzynkę” i „Wyślij p
 
   await test.step("„Wyślij ponownie” wysyła ten sam adres do akcji", async () => {
     // Widok sukcesu pojawia się, gdy nawigacja jeszcze ładuje (router wpisuje wynik akcji do stanu
-    // przed końcem rewalidacji). Przycisk ma być aktywny, zanim go klikniemy — przy blokadzie
-    // `disabled` na czas wysyłki to realny warunek, nie formalność.
+    // przed końcem rewalidacji), a w tym oknie przycisk jest zablokowany (`disabled` z `busy`
+    // w `app/routes/rejestracja.tsx`). Czekamy więc, aż będzie aktywny, zanim go klikniemy — to
+    // realny warunek, nie formalność.
     const resendButton = page.getByRole("button", { name: "Wyślij ponownie" });
     await expect(resendButton).toBeEnabled();
 
