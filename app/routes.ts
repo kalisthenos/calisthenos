@@ -4,6 +4,7 @@ export default [
   index("routes/_index.tsx"),
   route("login", "routes/login.tsx"),
   route("rejestracja", "routes/rejestracja.tsx"),
+  route("rejestracja/:token", "routes/rejestracja.$token.tsx"),
   route("wyloguj", "routes/wyloguj.tsx"),
   route("zaproszenie/:token", "routes/zaproszenie.$token.tsx"),
   route("upload/wideo", "routes/upload.wideo.tsx"),
